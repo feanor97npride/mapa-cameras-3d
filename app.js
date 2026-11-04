@@ -89,7 +89,7 @@ async function sendState() { // uma gravação por vez, para a versão (rev) nun
   const sent = snapshotState(); // base = o que o banco passa a ter depois desta gravação
   try {
     const r = await fetch("/api/cameras", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...sent, rev }) });
-    if (r.ok) { rev = (await r.json()).rev; base = structuredClone(sent); if (!pushTimer) saveState("Salvo ✓", "ok"); return; }
+    if (r.ok) { rev = (await r.json()).rev; base = structuredClone(sent); if (!pushTimer) saveState("Salvo ✓", "ok"); if (!$("paneProb").hidden) loadSince(); return; }
     saveState("Não salvo", "bad");
     if (r.status === 401) { remote = false; openLogin(); }
     else if (r.status === 409) await resolveConflict();
@@ -418,8 +418,31 @@ function render() {
   $("kTotal").textContent = cams.length; $("kOnline").textContent = k.online; $("kAlerta").textContent = k.alerta; $("kOffline").textContent = k.offline; $("kPlan").textContent = k.planejada;
   $("kPct").textContent = inst ? ((k.online + k.alerta) / inst * 100).toFixed(1).replace(".", ",") + "%" : "–";
   $("bar").innerHTML = inst ? ["online", "alerta", "offline"].map(s => `<i style="width:${k[s] / inst * 100}%;background:${STATUS[s].color}"></i>`).join("") : "";
+  renderProblems();
   buildCones();
 }
+/* ---------- Aba Problemas: câmeras offline ou em alerta, as mais antigas primeiro ---------- */
+let sinceMap = {}; // id -> desde quando está no status atual (do histórico no banco)
+function ago(ms) { const m = Math.max(0, Math.round(ms / 60000)); return m < 60 ? `há ${m} min` : m < 48 * 60 ? `há ${Math.floor(m / 60)} h ${m % 60} min` : `há ${Math.floor(m / 1440)} dias`; }
+function renderProblems() {
+  const probs = cams.filter(c => c.status === "offline" || c.status === "alerta"), now = Date.now();
+  const t = c => sinceMap[c.id] ? new Date(sinceMap[c.id]).getTime() : c.status === "offline" && c.ultimoSinal ? now - c.ultimoSinal * 60000 : now; // sem histórico: usa o "último sinal" (se houver)
+  probs.sort((a, b) => ORDER[a.status] - ORDER[b.status] || t(a) - t(b));
+  const off = probs.filter(c => c.status === "offline").length;
+  $("badgeProb").hidden = !probs.length; $("badgeProb").textContent = probs.length; $("badgeProb").classList.toggle("bad", off > 0);
+  $("probCount").textContent = probs.length === 1 ? "1 com problema" : `${probs.length} com problema`;
+  $("problems").innerHTML = probs.length ? probs.map(c => {
+    const known = sinceMap[c.id] || (c.status === "offline" && c.ultimoSinal);
+    return `<li><button data-id="${esc(c.id)}" aria-current="${c.id === selected}"><i class="dot ${c.status}"></i><span class="cid">${esc(c.id)}</span>
+      <span class="ctype${c.status === "offline" ? " late" : ""}">${known ? ago(now - t(c)) : STATUS[c.status].label}</span>
+      <span class="cname">${esc(c.nome)}${c.motivo ? " · " + esc(c.motivo) : ""}</span></button></li>`;
+  }).join("") : `<li class="empty">${cams.length ? "Tudo funcionando: nenhuma câmera offline ou em alerta." : "Nenhuma câmera cadastrada ainda."}</li>`;
+}
+async function loadSince() {
+  if (!remote) return renderProblems();
+  try { const r = await fetch("/api/problems"); if (r.ok) { sinceMap = (await r.json()).since || {}; renderProblems(); } } catch (e) { /* sem rede: mantém os tempos que já tem */ }
+}
+setInterval(() => { if (!$("paneProb").hidden) loadSince(); }, 60000); // enquanto a aba está aberta, atualiza os tempos
 $("q").addEventListener("input", render);
 $("fSetor").addEventListener("change", render);
 $("fTipo").addEventListener("change", render);
@@ -431,11 +454,14 @@ $("kpis").addEventListener("click", e => {
 });
 $("list").addEventListener("click", e => { const a = e.target.dataset.empty; if (a === "import") $("file").click(); if (a === "add") $("btnAdd").click(); });
 $("list").addEventListener("click", e => { const b = e.target.closest("button[data-id]"); if (b && !editing) select(b.dataset.id, true); });
+$("problems").addEventListener("click", e => { const b = e.target.closest("button[data-id]"); if (b && !editing) select(b.dataset.id, true); });
 function showTab(t) {
-  $("tabCams").setAttribute("aria-selected", t === "cams"); $("tabAreas").setAttribute("aria-selected", t === "areas");
-  $("paneCams").hidden = t !== "cams"; $("paneAreas").hidden = t !== "areas";
+  const tabs = { cams: ["tabCams", "paneCams"], prob: ["tabProb", "paneProb"], areas: ["tabAreas", "paneAreas"] };
+  for (const [k, [tab, pane]] of Object.entries(tabs)) { $(tab).setAttribute("aria-selected", k === t); $(pane).hidden = k !== t; }
+  if (t === "prob") loadSince();
 }
 $("tabCams").onclick = () => showTab("cams");
+$("tabProb").onclick = () => showTab("prob");
 $("tabAreas").onclick = () => showTab("areas");
 
 /* ---------- Ficha técnica ---------- */

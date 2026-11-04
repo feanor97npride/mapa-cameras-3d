@@ -28,7 +28,8 @@
   </div>
   <div class="tabs" role="tablist">
     <button role="tab" id="tabCams" aria-selected="true">Câmeras</button>
-    <button role="tab" id="tabAreas" aria-selected="false">Áreas e cobertura</button>
+    <button role="tab" id="tabProb" aria-selected="false">Problemas<span class="badge" id="badgeProb" hidden></span></button>
+    <button role="tab" id="tabAreas" aria-selected="false">Áreas</button>
   </div>
 
   <div class="pane" id="paneCams">
@@ -41,6 +42,11 @@
     </div>
     <div class="listhead"><span id="count">0 câmeras</span><span>Status · ID</span></div>
     <ul id="list" class="scroll"></ul>
+  </div>
+
+  <div class="pane" id="paneProb" hidden>
+    <div class="listhead"><span id="probCount">0 com problema</span><span>Há quanto tempo</span></div>
+    <ul id="problems" class="scroll"></ul>
   </div>
 
   <div class="pane" id="paneAreas" hidden>
