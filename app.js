@@ -480,6 +480,7 @@ const isHttp = u => /^https?:\/\//i.test(String(u || "").trim());
 function select(id, fly) {
   if (selected && byId[selected]?.entity) byId[selected].entity.billboard.image = ICONS[byId[selected].status];
   selected = id || null;
+  if ((vsCam || !$("vsbar").hidden) && vsCam !== selected) clearViewshed();
   const c = selected && byId[selected];
   $("card").classList.remove("collapsed"); // escolher outra câmera reabre a ficha
   if (!c) { $("card").hidden = true; render(); return; }
@@ -513,6 +514,7 @@ function select(id, fly) {
     <div class="actions">
       <button class="btn" data-act="fly">Centralizar</button>
       <button class="btn" data-act="pov">Ver da câmera</button>
+      <button class="btn wide" data-act="vs" title="Mostra o que a câmera enxerga de verdade, descontando prédios e relevo (precisa de Terreno + prédios ou Google 3D)">Visada real (prédios e relevo)</button>
       ${isHttp(c.stream) ? `<a class="btn wide" href="${esc(c.stream.trim())}" target="_blank" rel="noopener">Vídeo ao vivo ↗</a>` : ""}
       <a class="btn" href="${geUrl(c)}" target="_blank" rel="noopener">Google Earth ↗</a>
       <button class="btn primary" data-act="edit">Editar</button>
@@ -522,6 +524,47 @@ function select(id, fly) {
   if (fly) flyTo(c);
   document.querySelector(`#list button[data-id="${CSS.escape(c.id)}"]`)?.scrollIntoView({ block: "nearest" });
 }
+/* ---------- Visada real (protótipo): o que a câmera enxerga com prédios e relevo ---------- */
+let vsEntity = null, vsCam = null, vsRun = 0;
+function clearViewshed() { vsRun++; if (vsEntity) viewer.entities.remove(vsEntity); vsEntity = null; vsCam = null; $("vsbar").hidden = true; }
+$("vsClose").onclick = clearViewshed;
+// Única parte que fala com o Cesium para medir alturas (terreno + prédios, em detalhe máximo). Devolve a altura em cada posição e a do terreno sob a câmera (último item).
+// Exclui o que o próprio painel desenha (cones, mancha de cobertura, marcadores), senão vira "parede" no cálculo.
+async function measureHeights(cartos, onProgress) {
+  const mine = [conePrim, ...viewer.entities.values, ...camDS.entities.values, ...areaDS.entities.values, ...geoDS.entities.values, ...handleDS.entities.values, ...drawDS.entities.values].filter(Boolean);
+  const copy = () => cartos.map(x => new C.Cartographic(x.longitude, x.latitude)), terr = copy(), scn = copy();
+  await C.sampleTerrainMostDetailed(terrainTP, terr);
+  for (let i = 0; i < scn.length; i += 1000) { await scene.sampleHeightMostDetailed(scn.slice(i, i + 1000), mine); onProgress(Math.min(99, Math.round((i + 1000) / scn.length * 100))); } // as posições são alteradas no lugar
+  const heights = scn.map((x, i) => { const hs = [terr[i].height, x.height].filter(Number.isFinite); return hs.length ? Math.max(...hs) : undefined; });
+  return { heights, groundAtCamera: terr[terr.length - 1].height };
+}
+async function showViewshed(c) {
+  if (vsCam === c.id) return clearViewshed(); // clicar de novo desliga
+  if (mode3d === "plano" || !terrainTP) return toast("Escolha Terreno + prédios ou Google 3D em Camadas ▾ para ver a visada real.");
+  if (!scene.sampleHeightSupported) return toast("Este navegador não consegue medir a altura dos prédios.");
+  clearViewshed(); const run = ++vsRun; vsCam = c.id;
+  const S = vsSamples(c), cartos = S.pts.map(p => C.Cartographic.fromDegrees(p.lon, p.lat)); cartos.push(C.Cartographic.fromDegrees(c.lon, c.lat));
+  $("vsText").textContent = "Medindo prédios e relevo… 0%"; $("vsbar").hidden = false;
+  try {
+    const { heights, groundAtCamera } = await measureHeights(cartos, pct => { if (run === vsRun) $("vsText").textContent = `Medindo prédios e relevo… ${pct}%`; });
+    if (run !== vsRun) return; // o usuário fechou ou escolheu outra câmera enquanto media
+    const H = heights.slice(0, S.pts.length), h0 = (Number.isFinite(groundAtCamera) ? groundAtCamera : c.ground || 0) + c.altura, a = vsAnalyze(c, S, h0, H);
+    const unknown = [...a.status].filter(v => v === -1).length / S.pts.length;
+    if (a.pct == null) { $("vsText").textContent = "Sem dados de prédios e relevo nesta área (os blocos 3D ainda podem estar carregando). Tente de novo."; vsCam = null; return; }
+    // desenha: verde = visível, vermelho = escondido (mesma técnica da mancha de cobertura)
+    let w = c.lon, e = c.lon, s = c.lat, n = c.lat; for (const p of S.pts) { w = Math.min(w, p.lon); e = Math.max(e, p.lon); s = Math.min(s, p.lat); n = Math.max(n, p.lat); }
+    const kLon = 111320 * Math.cos(c.lat * D2R), W = Math.max(8, Math.min(1024, Math.ceil((e - w) * kLon / 1.5))), Hh = Math.max(8, Math.min(1024, Math.ceil((n - s) * 111320 / 1.5)));
+    const cv = document.createElement("canvas"); cv.width = W; cv.height = Hh; const g = cv.getContext("2d");
+    for (let k = 0; k < S.nR; k++) for (let i = 0; i < S.nD; i++) {
+      const st = a.status[k * S.nD + i]; if (st !== 1 && st !== 2) continue;
+      g.fillStyle = st === 1 ? "rgba(70,201,139,.6)" : "rgba(236,95,95,.65)"; g.beginPath();
+      vsCell(c, S, k, i).forEach(([lo, la], j) => { const x = (lo - w) / (e - w) * W, y = (n - la) / (n - s) * Hh; j ? g.lineTo(x, y) : g.moveTo(x, y); }); g.closePath(); g.fill();
+    }
+    vsEntity = viewer.entities.add({ rectangle: { coordinates: C.Rectangle.fromDegrees(w, s, e, n), material: new C.ImageMaterialProperty({ image: cv, transparent: true }), classificationType: C.ClassificationType.BOTH } });
+    $("vsText").textContent = `${c.id}: ${a.pct.toFixed(0)}% do que está no alcance e no ângulo da câmera é visível (verde); o vermelho está escondido atrás de prédio ou relevo.${unknown > 0.2 ? ` Faltam dados em ${Math.round(unknown * 100)}% da área.` : ""}`;
+  } catch (err) { console.error(err); if (run === vsRun) { clearViewshed(); toast("Não consegui medir os prédios e o relevo agora. Confira o token do Cesium e tente de novo."); } }
+}
+
 /* ---------- Manutenção por câmera ---------- */
 const brDate = iso => iso.split("-").reverse().join("/"); // 2026-11-03 -> 03/11/2026
 function parseDate(s) { // aceita 03/11/2026, 11/2026 e 2026-11-03; o resto vira "sem data"
@@ -664,6 +707,7 @@ function edit(id) {
     </div>
     <div class="actions"><button class="btn" data-act="cancel">Cancelar</button><button class="btn primary" data-act="save">Salvar</button></div>`;
   $("card").hidden = false;
+  clearViewshed(); // a câmera vai se mover
   camDS.clustering.enabled = false; // senão a câmera em edição pode virar parte de um grupo e não dá para arrastar
   sectionHints(); updateHandle(); scheduleCones();
   // se a câmera ou o ponto azul ficaram fora da área visível do mapa (a ficha ocupa a coluna da direita), recentraliza
@@ -731,6 +775,7 @@ $("card").addEventListener("click", e => {
   if (act === "close") select(null);
   if (act === "collapse") $("card").classList.add("collapsed");
   if (act === "hist") openHistory(c.id);
+  if (act === "vs") showViewshed(c);
   if (act === "maint") openMaint(c.id);
   if (act === "audit-more") loadAudit(c.id, true);
   if (act === "fly") flyTo(c);
@@ -796,6 +841,7 @@ async function sampleGround(list) {
   list.forEach((c, i) => c.ground = cartos[i].height || 0);
 }
 async function applyMode(mode) {
+  clearViewshed();
   if (mode !== "plano" && !token) { pendingMode = mode; return openToken(); }
   toast(mode === "plano" ? "Voltando ao mapa plano…" : "Carregando relevo e prédios 3D…");
   try {
@@ -1035,6 +1081,7 @@ if (token && savedMode && savedMode !== "plano") applyMode(savedMode); else comp
 function openLogin() { if (!$("dlgLogin").open) $("dlgLogin").showModal(); }
 async function applyState(c, a) {
   if (editing) cancelEdit();
+  clearViewshed();
   cams = c; areas = a; selected = null; $("card").hidden = true;
   index(); await sampleGround(cams); rebuildEntities(); rebuildAreaEntities(); renderSetores(); $("fSetor").value = ""; render(); computeCoverage(); flyHome();
 }

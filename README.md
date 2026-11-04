@@ -16,6 +16,7 @@ O front-end são três arquivos estáticos (`index.html`, `style.css`, `app.js`)
 - Aba **Problemas**: só as câmeras offline ou em alerta, as mais antigas primeiro, com há quanto tempo estão assim (do histórico de status)
 - Agrupamento automático das câmeras próximas, colorido pelo pior status
 - Ficha técnica em painel lateral recolhível (o mapa encolhe em vez de ficar coberto), "ver do ponto de vista da câmera" e link para o Google Earth
+- **Visada real** (protótipo, uma câmera por vez): botão na ficha que mede prédios e relevo e pinta de verde o que a câmera enxerga e de vermelho o que está escondido, com a porcentagem visível. Exige o modo Terreno + prédios ou Google 3D e o token do Cesium (`viewshed.js`)
 - Cadastro e edição no mapa: arraste a câmera para posicioná-la e o ponto azul para girar e definir o alcance, com o cone atualizando ao vivo
 - Formulário de edição em seções que abrem e fecham (Identificação, Visão, Posição, Equipamento, Gestão), lembrando quais você deixa abertas
 - Importação de planilha (.xlsx, .xls ou .csv) com prévia do que muda, atualizando por ID ou substituindo tudo, e exportação para Excel e KML

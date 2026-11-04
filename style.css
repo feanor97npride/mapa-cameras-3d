@@ -101,7 +101,8 @@ main.picking #map { cursor: crosshair; }
 .legend { position: absolute; right: 12px; bottom: 28px; z-index: 2; background: color-mix(in srgb, var(--panel) 92%, transparent); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; display: flex; gap: 12px; font: 500 11px/1 var(--f-mono); color: var(--muted); backdrop-filter: blur(6px); }
 .legend span { display: flex; align-items: center; gap: 6px; }
 #modebar { position: absolute; left: 50%; bottom: 70px; transform: translateX(-50%); z-index: 4; background: var(--panel); border: 1px solid var(--accent); border-radius: 8px; padding: 8px 8px 8px 14px; display: flex; gap: 10px; align-items: center; box-shadow: 0 8px 30px rgb(0 0 0 / .4); max-width: calc(100% - 32px); }
-#modebar span { font-size: 13px; }
+#vsbar { position: absolute; left: 50%; bottom: 70px; transform: translateX(-50%); z-index: 4; background: var(--panel); border: 1px solid var(--accent); border-radius: 8px; padding: 8px 8px 8px 14px; display: flex; gap: 10px; align-items: center; box-shadow: 0 8px 30px rgb(0 0 0 / .4); max-width: calc(100% - 32px); }
+#modebar span, #vsbar span { font-size: 13px; }
 
 #card { min-height: 0; overflow-y: auto; background: var(--panel); border-left: 1px solid var(--line); }
 #card.collapsed { display: none; }
