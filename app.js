@@ -713,9 +713,20 @@ $("btnKml").onclick = () => {
 };
 
 /* ---------- Relatório (imprimir / salvar em PDF) ---------- */
-$("btnReport").onclick = () => {
+function availChart(days) { // barras por dia (0–100%), em SVG para imprimir bem
+  const W = 720, H = 150, L = 36, B = 18, T = 6, bw = (W - L) / days.length, h = H - B - T;
+  const col = p => p >= 95 ? "#2e9e6b" : p >= 80 ? "#c58f1c" : "#d14343", fd = s => s.slice(8) + "/" + s.slice(5, 7);
+  const bars = days.map((d, i) => d.pct == null ? "" : `<rect x="${(L + i * bw + 1).toFixed(1)}" y="${(T + h * (1 - d.pct / 100)).toFixed(1)}" width="${(bw - 2).toFixed(1)}" height="${(h * d.pct / 100).toFixed(1)}" fill="${col(d.pct)}"><title>${esc(d.day)}: ${d.pct}%</title></rect>`).join("");
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Disponibilidade por dia" font-family="sans-serif" font-size="10" fill="#555">
+    <line x1="${L}" x2="${W}" y1="${T}" y2="${T}" stroke="#ddd"/><line x1="${L}" x2="${W}" y1="${T + h}" y2="${T + h}" stroke="#999"/>
+    <text x="${L - 4}" y="${T + 3}" text-anchor="end">100%</text><text x="${L - 4}" y="${T + h + 3}" text-anchor="end">0%</text>
+    ${bars}<text x="${L}" y="${H - 4}">${fd(days[0].day)}</text><text x="${W}" y="${H - 4}" text-anchor="end">${fd(days[days.length - 1].day)}</text></svg>`;
+}
+$("btnReport").onclick = async () => {
   viewer.render();
   let img = ""; try { img = viewer.canvas.toDataURL("image/jpeg", 0.85); } catch (e) {}
+  let av = null; // disponibilidade vem do histórico no banco; sem login/banco o relatório sai sem esta seção
+  if (remote) try { const r = await fetch("/api/availability"); if (r.ok) av = await r.json(); } catch (e) {}
   const k = counts(), inst = cams.length - k.planejada, now = new Date();
   const row = c => `<tr><td>${esc(c.id)}</td><td>${esc(c.nome)}</td><td>${esc(c.setor)}</td><td>${esc(c.tipo)}</td><td>${STATUS[c.status].label}</td><td>${esc(c.motivo)}</td><td>${esc(c.ip)}</td></tr>`;
   const head = `<tr><th>ID</th><th>Nome</th><th>Setor</th><th>Tipo</th><th>Status</th><th>Motivo</th><th>IP</th></tr>`;
@@ -727,6 +738,7 @@ $("btnReport").onclick = () => {
       <div><b>${inst ? ((k.online + k.alerta) / inst * 100).toFixed(1).replace(".", ",") : "–"}%</b>disponibilidade</div></div>
     ${img ? `<img src="${img}" alt="Mapa das câmeras">` : ""}
     ${areas.length ? `<h2>Cobertura das áreas</h2><table><tr><th>Área</th><th>Tamanho</th><th>Coberto</th><th>Ponto cego</th></tr>${areas.map(a => `<tr><td>${esc(a.nome)}</td><td>${Math.round(a.total || 0).toLocaleString("pt-BR")} m²</td><td>${(a.pct ?? 0).toFixed(0)}%</td><td>${(100 - (a.pct ?? 0)).toFixed(0)}%</td></tr>`).join("")}</table>` : ""}
+    ${av && av.days.length ? `<h2>Disponibilidade nos últimos 30 dias</h2>${availChart(av.days)}${(() => { const low = av.cameras.filter(c => c.pct < 100); return low.length ? `<table><tr><th>Câmera</th><th>Nome</th><th>Disponibilidade</th></tr>${low.map(c => `<tr><td>${esc(c.id)}</td><td>${esc(byId[c.id]?.nome)}</td><td>${String(c.pct).replace(".", ",")}%</td></tr>`).join("")}</table>` : "<p>Todas as câmeras com 100% no período.</p>"; })()}` : ""}
     <h2>Câmeras com problema (${probs.length})</h2>${probs.length ? `<table>${head}${probs.map(row).join("")}</table>` : "<p>Nenhuma câmera offline ou em alerta.</p>"}
     <h2>Inventário completo (${cams.length})</h2><table>${head}${[...cams].sort((a, b) => String(a.id).localeCompare(String(b.id))).map(row).join("")}</table>`;
   window.print();
