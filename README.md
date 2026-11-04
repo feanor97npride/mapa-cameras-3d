@@ -1,0 +1,56 @@
+# Mapa de Câmeras 3D
+
+Painel de gestão de câmeras de segurança sobre um globo 3D ([CesiumJS](https://cesium.com/platform/cesiumjs/)): posição, direção e área coberta por cada câmera, status, ficha técnica, cobertura de áreas e pontos cegos.
+
+O projeto é um único arquivo (`index.html`), sem build e sem servidor. As bibliotecas são carregadas por CDN.
+
+## Funcionalidades
+
+- Globo 3D com imagem de satélite ou mapa escuro
+- Cones de visão 3D (azimute, inclinação, campo de visão e alcance) e pegada no solo
+- Status online, alerta, offline e planejada, com disponibilidade em %
+- Agrupamento automático das câmeras próximas, colorido pelo pior status
+- Ficha técnica, "ver do ponto de vista da câmera" e link para o Google Earth
+- Cadastro e edição no mapa, com o cone atualizando ao vivo
+- Importação de planilha (.xlsx, .xls ou .csv) e exportação para Excel e KML
+- Áreas de interesse com % de cobertura e mancha de pontos cegos
+- Simulação de câmeras planejadas antes da instalação
+- Relevo real, prédios do OpenStreetMap e cidades fotorrealistas do Google (com token Cesium ion)
+- Relatório para imprimir ou salvar em PDF
+
+## Como usar
+
+Abra o painel no navegador. Ele começa com câmeras de exemplo na região da Av. Paulista (dados fictícios).
+
+Para usar as suas câmeras, clique em **Dados → Escolher planilha**. O arquivo [`exemplo-cameras.csv`](exemplo-cameras.csv) mostra o formato. Só **Latitude** e **Longitude** são obrigatórias.
+
+| Coluna | Significado |
+|---|---|
+| Altura | metros acima do solo |
+| Azimute | direção em graus (0 = norte, 90 = leste) |
+| Inclinação | graus abaixo do horizonte |
+| FOV | ângulo de visão horizontal, em graus |
+| Alcance | metros |
+| Status | Online, Alerta, Offline ou Planejada |
+| Stream | link do vídeo ao vivo (http/https) |
+
+Os dados cadastrados ficam salvos no navegador de quem usa (localStorage). Use **Dados → Planilha Excel** para fazer backup ou levar para outro computador.
+
+## Relevo e prédios 3D
+
+Os modos **Terreno + prédios** e **Google 3D** precisam de um token gratuito do [Cesium ion](https://ion.cesium.com/tokens). Para o Google 3D, adicione também o asset *Google Photorealistic 3D Tiles* em Asset Depot.
+
+O token é colado no próprio painel (botão **Token Cesium**) e fica só no navegador. Ele não vai para o código. Como o site é público, restrinja o token ao domínio do GitHub Pages nas configurações do token (*Allowed URLs*).
+
+## Publicar no GitHub Pages
+
+1. **Settings → Pages**
+2. Em *Source*, escolha **Deploy from a branch**
+3. Selecione a branch `main` e a pasta `/ (root)` e clique em **Save**
+4. Em 1–2 minutos o painel fica em `https://SEU-USUARIO.github.io/mapa-cameras-3d/`
+
+## Tecnologias
+
+- [CesiumJS 1.123](https://cesium.com/platform/cesiumjs/): globo 3D
+- [SheetJS 0.18.5](https://sheetjs.com/): leitura e escrita de planilhas
+- Imagens de satélite: Esri World Imagery. Mapa: OpenStreetMap / CARTO

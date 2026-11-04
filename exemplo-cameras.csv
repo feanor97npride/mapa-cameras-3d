@@ -1,0 +1,6 @@
+ID,Nome,Setor,Tipo,Modelo,Latitude,Longitude,Altura,Azimute,Inclinação,FOV,Alcance,Status,Motivo,IP,NVR,Responsável,Instalação,Stream
+CAM-001,Portaria principal,Entrada,Dome,Dome 4MP IR 30 m,-23.561420,-46.655810,4,180,25,105,35,Online,,10.0.0.11,NVR-01,Equipe Centro,03/2024,
+CAM-002,Cancela do estacionamento,Estacionamento,LPR,LPR 2MP leitura de placas,-23.561680,-46.655420,5,135,15,30,40,Online,,10.0.0.12,NVR-01,Equipe Centro,03/2024,
+CAM-003,Poste estacionamento norte,Estacionamento,Bullet,Bullet 4MP IR 50 m,-23.561050,-46.655200,8,220,20,90,60,Alerta,Lente obstruída ou suja,10.0.0.13,NVR-01,Equipe Sul,05/2024,
+CAM-004,Cobertura bloco A,Perímetro,PTZ,Speed Dome PTZ 4MP zoom 25x,-23.560900,-46.656100,28,90,30,58,150,Offline,Switch PoE sem link,10.0.0.14,NVR-02,Equipe Sul,08/2023,
+CAM-005,Doca de carga,Perímetro,Bullet,Bullet 8MP IR 80 m,-23.562100,-46.656300,6,45,18,90,60,Planejada,,,,,,
