@@ -66,9 +66,7 @@ function sampleCams() {
 }
 
 /* ---------- Estado ---------- */
-let cams = store.get("cams") || sampleCams();
-let isSample = !store.get("cams");
-let areas = store.get("areas") || [];
+let cams = [], isSample = false, areas = []; // preenchido por loadRemote (banco) ou loadLocal (navegador), para não mostrar exemplo atrás do login
 let byId = {};
 let selected = null, coneMode = "all", mode3d = "plano", token = store.get("ionToken") || "";
 const statusOn = { online: true, alerta: true, offline: true, planejada: true };
@@ -83,19 +81,22 @@ function save() {
 function pushRemote() {
   if (!remote || readonly) return;
   clearTimeout(pushTimer);
+  saveState("Salvando…");
   pushTimer = setTimeout(() => { pushQueue = pushQueue.then(sendState); }, 600);
 }
 async function sendState() { // uma gravação por vez, para a versão (rev) nunca ficar defasada
   pushTimer = 0;
   try {
     const r = await fetch("/api/cameras", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...snapshotState(), rev }) });
-    if (r.ok) rev = (await r.json()).rev;
-    else if (r.status === 401) { remote = false; openLogin(); }
+    if (r.ok) { rev = (await r.json()).rev; if (!pushTimer) saveState("Salvo ✓", "ok"); return; }
+    saveState("Não salvo", "bad");
+    if (r.status === 401) { remote = false; openLogin(); }
     else if (r.status === 409) { toast("Outra pessoa alterou os dados. Recarregando a versão mais nova (sua última mudança não foi salva)."); loadRemote(); }
     else toast("Não consegui salvar no banco: " + ((await r.json().catch(() => ({}))).error || r.status));
-  } catch (e) { toast("Sem conexão: as mudanças não foram salvas no banco."); }
+  } catch (e) { saveState("Não salvo", "bad"); toast("Sem conexão: as mudanças não foram salvas no banco."); }
 }
-index(); $("tagSample").hidden = !isSample;
+function saveState(text, cls = "") { const el = $("saveState"); el.textContent = text; el.className = "save " + cls; }
+index();
 
 /* ---------- Mapa ---------- */
 const BASES = {
@@ -377,7 +378,8 @@ function render() {
   $("list").innerHTML = sorted.length ? sorted.map(c => `<li><button data-id="${esc(c.id)}" aria-current="${c.id === selected}">
     <i class="dot ${c.status}"></i><span class="cid">${esc(c.id)}</span><span class="ctype">${esc(c.tipo)}</span>
     <span class="cname">${esc(c.nome)}${c.motivo && c.status !== "online" ? " · " + esc(c.motivo) : ""}</span></button></li>`).join("")
-    : `<li class="empty">Nenhuma câmera com esses filtros.</li>`;
+    : cams.length ? `<li class="empty">Nenhuma câmera com esses filtros.</li>`
+    : `<li class="empty">Nenhuma câmera cadastrada ainda.${readonly ? "" : `<br><button class="btn primary" data-empty="import">Importar planilha</button><button class="btn" data-empty="add">+ Adicionar câmera</button>`}</li>`;
   $("count").textContent = `${vis.length} de ${cams.length} câmeras`;
   const k = counts(), inst = cams.length - k.planejada;
   $("kTotal").textContent = cams.length; $("kOnline").textContent = k.online; $("kAlerta").textContent = k.alerta; $("kOffline").textContent = k.offline; $("kPlan").textContent = k.planejada;
@@ -394,6 +396,7 @@ $("kpis").addEventListener("click", e => {
   document.querySelectorAll(".kpi").forEach(el => el.setAttribute("aria-pressed", el.dataset.k === "all" ? Object.values(statusOn).every(Boolean) : statusOn[el.dataset.k]));
   render();
 });
+$("list").addEventListener("click", e => { const a = e.target.dataset.empty; if (a === "import") $("file").click(); if (a === "add") $("btnAdd").click(); });
 $("list").addEventListener("click", e => { const b = e.target.closest("button[data-id]"); if (b && !editing) select(b.dataset.id, true); });
 function showTab(t) {
   $("tabCams").setAttribute("aria-selected", t === "cams"); $("tabAreas").setAttribute("aria-selected", t === "areas");
@@ -662,7 +665,7 @@ function download(text, name, type) {
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
 
-$("btnData").onclick = () => { $("resetBox").innerHTML = `<button class="btn danger" id="btnReset">Voltar aos dados de exemplo</button>`; $("dbBox").hidden = !remote; $("btnPushLocal").hidden = !(store.get("cams") || []).length; $("dlgData").showModal(); };
+$("btnData").onclick = () => { $("resetBox").innerHTML = `<button class="btn danger" id="btnReset">Voltar aos dados de exemplo</button>`; $("dbBox").hidden = !remote || readonly || !(store.get("cams") || []).length; $("dlgData").showModal(); };
 $("dataClose").onclick = () => $("dlgData").close();
 $("btnImport").onclick = () => $("file").click();
 $("btnTemplate").onclick = () => writeXlsx(exportRows(cams.slice(0, 3)), "modelo-cameras.xlsx");
@@ -769,16 +772,22 @@ function syncToken(dbToken) { // o token do banco vale para todos; se o banco es
   } else if (!dbToken && token) saveTokenRemote();
 }
 async function loadRemote() {
+  let r;
+  try { r = await fetch("/api/cameras"); } catch (e) { return remote ? toast("Sem conexão com o banco.") : loadLocal(); } // arquivo aberto do disco ou sem rede
   try {
-    const r = await fetch("/api/cameras");
     if (r.status === 401) return openLogin();
-    if (!r.ok) return; // sem /api (ex.: arquivo aberto direto do disco): segue com os dados do navegador
+    if (!r.ok) return remote ? toast("Não consegui recarregar do banco.") : loadLocal(); // sem /api (ex.: servidor local de testes): usa os dados do navegador
     const d = await r.json();
     remote = true; rev = d.rev; readonly = d.role !== "edit"; document.body.classList.toggle("readonly", readonly); isSample = false; $("tagSample").hidden = true;
+    $("userEmail").textContent = d.email + (readonly ? " · somente leitura" : ""); $("userBox").hidden = false;
     await applyState(d.cams, d.areas);
     syncToken(d.cesiumToken);
     toast(readonly ? "Acesso somente leitura." : d.cams.length ? `${d.cams.length} câmeras carregadas do banco.` : "Banco vazio. Importe uma planilha em Dados.");
-  } catch (e) { console.error(e); }
+  } catch (e) { console.error(e); } // nunca cai para os dados do navegador depois de usar o banco: a próxima gravação os mandaria para lá
+}
+function loadLocal() {
+  isSample = !store.get("cams"); $("tagSample").hidden = !isSample;
+  return applyState(store.get("cams") || sampleCams(), store.get("areas") || []);
 }
 async function doLogin(signup) {
   $("loginMsg").textContent = "";

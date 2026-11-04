@@ -15,13 +15,14 @@
 <body>
 <aside>
   <div class="head">
-    <div class="brand"><h1>Mapa de Câmeras 3D</h1><span class="tag" id="tagSample" title="Câmeras fictícias geradas para demonstração">Dados de exemplo</span></div>
+    <div class="brand"><h1>Mapa de Câmeras 3D</h1><span class="tag" id="tagSample" title="Câmeras fictícias geradas para demonstração" hidden>Dados de exemplo</span></div>
+    <div class="user" id="userBox" hidden><span id="userEmail"></span><span class="save" id="saveState" role="status"></span><button class="btn sm" id="btnLogout">Sair</button></div>
     <div class="kpis" id="kpis">
       <button class="kpi" data-k="all" aria-pressed="true"><b id="kTotal">0</b><span>Total</span></button>
       <button class="kpi" data-k="online" aria-pressed="true"><b id="kOnline">0</b><span><i class="dot online"></i>Online</span></button>
       <button class="kpi" data-k="alerta" aria-pressed="true"><b id="kAlerta">0</b><span><i class="dot alerta"></i>Alerta</span></button>
       <button class="kpi" data-k="offline" aria-pressed="true"><b id="kOffline">0</b><span><i class="dot offline"></i>Offline</span></button>
-      <button class="kpi" data-k="planejada" aria-pressed="true"><b id="kPlan">0</b><span><i class="dot planejada"></i>Plan.</span></button>
+      <button class="kpi" data-k="planejada" aria-pressed="true"><b id="kPlan">0</b><span><i class="dot planejada"></i>Planej.</span></button>
     </div>
     <div class="avail"><span>Disponibilidade</span><div class="bar" id="bar"></div><span id="kPct">0%</span></div>
   </div>
@@ -60,7 +61,7 @@
   <div class="foot">
     <button class="btn" id="btnData">Dados</button>
     <button class="btn" id="btnReport">Relatório</button>
-    <button class="btn" id="btnCfg">Token Cesium</button>
+    <button class="btn" id="btnCfg" title="Token do Cesium ion (relevo, prédios e Google 3D)">Configurações</button>
   </div>
 </aside>
 
@@ -91,7 +92,8 @@
 
 <dialog id="dlg">
   <form method="dialog">
-    <h2>Token do Cesium ion</h2>
+    <h2>Configurações</h2>
+    <h3>Token do Cesium ion</h3>
     <p>Necessário para os modos <b>Terreno + prédios</b> (relevo real e prédios do OpenStreetMap) e <b>Google 3D</b> (cidades fotorrealistas do Google, as mesmas do Google Earth).</p>
     <p>No painel do Cesium ion, confirme que o token tem acesso aos assets <code>Cesium World Terrain</code>, <code>Cesium OSM Buildings</code> e <code>Google Photorealistic 3D Tiles</code> (adicione este último em Asset Depot, é gratuito). Com login, o token fica salvo no banco do painel e vale para todos os usuários (restrinja-o ao seu domínio em <i>Allowed URLs</i> no Cesium ion). Sem login, fica só neste navegador.</p>
     <label><span class="lbl">Token</span><input id="token" type="text" autocomplete="off" placeholder="eyJhbGciOi…"></label>
@@ -120,7 +122,7 @@
     </div>
     <div id="dbBox" hidden>
       <h3>Banco de dados</h3>
-      <div class="grid2"><button class="btn" id="btnPushLocal" hidden>Enviar dados deste navegador</button><button class="btn" id="btnLogout">Sair</button></div>
+      <div class="grid2"><button class="btn" id="btnPushLocal">Enviar dados deste navegador</button></div>
     </div>
     <h3>Restaurar</h3>
     <div class="grid2" id="resetBox">

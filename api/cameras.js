@@ -24,7 +24,7 @@ export default async function handler(req, res) {
         sql`SELECT nome, pts FROM areas ORDER BY id`,
         sql`SELECT rev::int AS rev, cesium_token AS token FROM app_state`,
       ]);
-      return res.json({ cams, areas, rev, role: user.role, cesiumToken: token });
+      return res.json({ cams, areas, rev, role: user.role, email: user.email, cesiumToken: token });
     }
     if (req.method === "PUT") { // substitui o estado inteiro (o histórico de status só cresce quando o status muda)
       if (user.role !== "edit") return res.status(403).json({ error: "Seu acesso é somente leitura." });
