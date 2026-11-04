@@ -398,6 +398,7 @@ function pushRemote() {
       const r = await fetch("/api/cameras", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(snapshotState()) });
       if (r.status === 401) { remote = false; openLogin(); } else if (!r.ok) toast("Não consegui salvar no banco: " + ((await r.json().catch(() => ({}))).error || r.status));
     } catch (e) { toast("Sem conexão: as mudanças não foram salvas no banco."); }
+    pushTimer = 0;
   }, 600);
 }
 index(); $("tagSample").hidden = !isSample;
@@ -738,6 +739,7 @@ function select(id, fly) {
     <div class="sec"><h3>Gestão</h3><dl>
       <dt>Setor</dt><dd>${esc(c.setor)}</dd><dt>Instalada em</dt><dd>${esc(c.instalacao) || "–"}</dd>
       <dt>Últ. manutenção</dt><dd>${esc(c.manutencao) || "–"}</dd><dt>Responsável</dt><dd>${esc(c.responsavel) || "–"}</dd></dl></div>
+    <div class="sec" id="histSec" hidden><h3>Histórico · 30 dias</h3><div id="histBody"></div></div>
     <div class="actions">
       <button class="btn" data-act="fly">Centralizar</button>
       <button class="btn" data-act="pov">Ver da câmera</button>
@@ -746,9 +748,22 @@ function select(id, fly) {
       <button class="btn primary" data-act="edit">Editar</button>
     </div>`;
   $("card").hidden = false;
-  render();
+  render(); loadHistory(c.id);
   if (fly) flyTo(c);
   document.querySelector(`#list button[data-id="${CSS.escape(c.id)}"]`)?.scrollIntoView({ block: "nearest" });
+}
+async function loadHistory(id) {
+  if (!remote) return;
+  if (pushTimer) await new Promise(r => setTimeout(r, 1500)); // espera a gravação pendente chegar ao banco
+  try {
+    const r = await fetch("/api/history?id=" + encodeURIComponent(id));
+    if (!r.ok || selected !== id || editing || !$("histBody")) return;
+    const { events, availability } = await r.json();
+    const fmt = t => new Date(t).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+    $("histBody").innerHTML = `<p class="asub">Disponibilidade: <b>${availability == null ? "–" : availability.toFixed(1).replace(".", ",") + "%"}</b></p>` +
+      `<dl>${events.slice(0, 8).map(e => `<dt>${fmt(e.at)}</dt><dd><i class="dot ${esc(e.status)}"></i> ${esc(STATUS[e.status]?.label || e.status)}${e.motivo ? " · " + esc(e.motivo) : ""}</dd>`).join("")}</dl>`;
+    $("histSec").hidden = false;
+  } catch (e) { console.error(e); }
 }
 function flyTo(c) {
   viewer.camera.flyToBoundingSphere(new C.BoundingSphere(camPos(c), Math.max(60, c.alcance * 1.4)), {
