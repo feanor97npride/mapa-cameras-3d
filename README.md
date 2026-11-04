@@ -52,7 +52,7 @@ O token é colado no próprio painel (botão **Token Cesium**). Com login ele fi
 ## Tecnologias
 
 - [CesiumJS 1.123](https://cesium.com/platform/cesiumjs/): globo 3D
-- [SheetJS 0.18.5](https://sheetjs.com/): leitura e escrita de planilhas
+- [SheetJS 0.20.3](https://sheetjs.com/): leitura e escrita de planilhas (arquivo local em `vendor/`, com hash de integridade)
 - Imagens de satélite: Esri World Imagery. Mapa: OpenStreetMap / CARTO
 
 ## Backup
