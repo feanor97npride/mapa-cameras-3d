@@ -40,7 +40,7 @@ Os dados cadastrados ficam salvos no navegador de quem usa (localStorage). Use *
 
 Os modos **Terreno + prédios** e **Google 3D** precisam de um token gratuito do [Cesium ion](https://ion.cesium.com/tokens). Para o Google 3D, adicione também o asset *Google Photorealistic 3D Tiles* em Asset Depot.
 
-O token é colado no próprio painel (botão **Token Cesium**) e fica só no navegador. Ele não vai para o código. Como o site é público, restrinja o token ao domínio do GitHub Pages nas configurações do token (*Allowed URLs*).
+O token é colado no próprio painel (botão **Token Cesium**). Com login ele fica no banco (tabela `app_state`) e vale para todos os usuários; não vai para o código. Só editores o alteram, mas quem faz login o recebe no navegador, como todo token do Cesium ion. Como o site é público, restrinja o token ao domínio do GitHub Pages nas configurações do token (*Allowed URLs*).
 
 ## Publicar no GitHub Pages
 

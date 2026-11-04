@@ -19,12 +19,12 @@ export default async function handler(req, res) {
   if (!user) return;
   try {
     if (req.method === "GET") {
-      const [cams, areas, [{ rev }]] = await sql.transaction([
+      const [cams, areas, [{ rev, token }]] = await sql.transaction([
         sql`SELECT id, nome, setor, tipo, modelo, lat, lon, ground, altura, heading, tilt, hfov, alcance, status, motivo, ultimo_sinal AS "ultimoSinal", ip, firmware, nvr, retencao, instalacao, manutencao, responsavel, stream FROM cameras ORDER BY id`,
         sql`SELECT nome, pts FROM areas ORDER BY id`,
-        sql`SELECT rev::int AS rev FROM app_state`,
+        sql`SELECT rev::int AS rev, cesium_token AS token FROM app_state`,
       ]);
-      return res.json({ cams, areas, rev, role: user.role });
+      return res.json({ cams, areas, rev, role: user.role, cesiumToken: token });
     }
     if (req.method === "PUT") { // substitui o estado inteiro (o histórico de status só cresce quando o status muda)
       if (user.role !== "edit") return res.status(403).json({ error: "Seu acesso é somente leitura." });

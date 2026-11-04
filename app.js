@@ -597,7 +597,7 @@ $("dlg").addEventListener("close", () => {
   if (v === "save") token = $("token").value.trim();
   else if (v === "clear") token = "";
   else { pendingMode = null; return; }
-  store.set("ionToken", token || null);
+  store.set("ionToken", token || null); saveTokenRemote();
   if (!token) return applyMode("plano");
   applyMode(pendingMode || (mode3d === "plano" ? "terreno" : mode3d)); pendingMode = null;
 });
@@ -759,6 +759,15 @@ async function applyState(c, a) {
   cams = c; areas = a; selected = null; $("card").hidden = true;
   index(); await sampleGround(cams); rebuildEntities(); rebuildAreaEntities(); renderSetores(); $("fSetor").value = ""; render(); computeCoverage(); flyHome();
 }
+function saveTokenRemote() {
+  if (remote && !readonly) fetch("/api/settings", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ cesiumToken: token }) }).catch(() => {});
+}
+function syncToken(dbToken) { // o token do banco vale para todos; se o banco está vazio e este navegador tem um, o editor o envia
+  if (dbToken && dbToken !== token) {
+    token = dbToken; store.set("ionToken", token); C.Ion.defaultAccessToken = token;
+    const m = store.get("mode3d"); if (m && m !== "plano") applyMode(m);
+  } else if (!dbToken && token) saveTokenRemote();
+}
 async function loadRemote() {
   try {
     const r = await fetch("/api/cameras");
@@ -767,6 +776,7 @@ async function loadRemote() {
     const d = await r.json();
     remote = true; rev = d.rev; readonly = d.role !== "edit"; document.body.classList.toggle("readonly", readonly); isSample = false; $("tagSample").hidden = true;
     await applyState(d.cams, d.areas);
+    syncToken(d.cesiumToken);
     toast(readonly ? "Acesso somente leitura." : d.cams.length ? `${d.cams.length} câmeras carregadas do banco.` : "Banco vazio. Importe uma planilha em Dados.");
   } catch (e) { console.error(e); }
 }
