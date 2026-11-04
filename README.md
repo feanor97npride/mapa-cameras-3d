@@ -2,7 +2,7 @@
 
 Painel de gestão de câmeras de segurança sobre um globo 3D ([CesiumJS](https://cesium.com/platform/cesiumjs/)): posição, direção e área coberta por cada câmera, status, ficha técnica, cobertura de áreas e pontos cegos.
 
-O front-end são três arquivos estáticos (`index.html`, `style.css`, `app.js`), sem build; as bibliotecas vêm de CDN. As câmeras ficam num banco Neon, acessado por funções da Vercel em `api/`, com login restrito aos e-mails da variável `ALLOWED_EMAILS`.
+O front-end são três arquivos estáticos (`index.html`, `style.css`, `app.js`), sem build; as bibliotecas vêm de CDN. As câmeras ficam num banco Neon, acessado por funções da Vercel em `api/`, com login restrito: e-mails em `ALLOWED_EMAILS` editam; e-mails em `VIEWER_EMAILS` só consultam (separe por vírgula).
 
 ## Funcionalidades
 

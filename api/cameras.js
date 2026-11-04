@@ -15,7 +15,8 @@ function toRow(c) {
 }
 
 export default async function handler(req, res) {
-  if (!requireUser(req, res)) return;
+  const user = requireUser(req, res);
+  if (!user) return;
   try {
     if (req.method === "GET") {
       const [cams, areas, [{ rev }]] = await sql.transaction([
@@ -23,9 +24,10 @@ export default async function handler(req, res) {
         sql`SELECT nome, pts FROM areas ORDER BY id`,
         sql`SELECT rev::int AS rev FROM app_state`,
       ]);
-      return res.json({ cams, areas, rev });
+      return res.json({ cams, areas, rev, role: user.role });
     }
     if (req.method === "PUT") { // substitui o estado inteiro (o histórico de status só cresce quando o status muda)
+      if (user.role !== "edit") return res.status(403).json({ error: "Seu acesso é somente leitura." });
       if (!jsonOnly(req, res)) return;
       const { cams, areas, rev } = req.body || {};
       if (!Number.isInteger(rev) || !Array.isArray(cams) || !Array.isArray(areas) || cams.length > 5000 || areas.length > 500) return res.status(400).json({ error: "dados inválidos" });

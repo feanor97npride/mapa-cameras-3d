@@ -73,7 +73,7 @@ let byId = {};
 let selected = null, coneMode = "all", mode3d = "plano", token = store.get("ionToken") || "";
 const statusOn = { online: true, alerta: true, offline: true, planejada: true };
 function index() { byId = Object.fromEntries(cams.map(c => [c.id, c])); }
-let remote = false, pushTimer = 0, rev = 0, pushQueue = Promise.resolve(); // rev: versão do banco que este navegador carregou // remote: logado, dados no banco Neon (via /api) em vez do navegador
+let remote = false, readonly = false, pushTimer = 0, rev = 0, pushQueue = Promise.resolve(); // rev: versão do banco que este navegador carregou // remote: logado, dados no banco Neon (via /api) em vez do navegador
 const snapshotState = () => ({ cams: cams.map(({ entity, _new, ...r }) => r), areas: areas.map(({ pct, total, label, ...r }) => r) });
 function save() {
   if (!remote) { store.set("cams", snapshotState().cams); store.set("areas", snapshotState().areas); }
@@ -81,7 +81,7 @@ function save() {
   pushRemote();
 }
 function pushRemote() {
-  if (!remote) return;
+  if (!remote || readonly) return;
   clearTimeout(pushTimer);
   pushTimer = setTimeout(() => { pushQueue = pushQueue.then(sendState); }, 600);
 }
@@ -274,7 +274,7 @@ function renderAreas() {
   $("areas").innerHTML = areas.map((a, i) => {
     const pct = a.pct ?? 0, col = pct >= 90 ? "var(--ok)" : pct >= 60 ? "var(--warn)" : "var(--bad)";
     const ha = (a.total || 0) >= 10000 ? ((a.total) / 10000).toFixed(2).replace(".", ",") + " ha" : Math.round(a.total || 0).toLocaleString("pt-BR") + " m²";
-    return `<li><div class="arow"><input data-i="${i}" value="${esc(a.nome)}" aria-label="Nome da área"><span class="pct" style="color:${col}">${pct.toFixed(0)}%</span></div>
+    return `<li><div class="arow"><input data-i="${i}" value="${esc(a.nome)}" aria-label="Nome da área"${readonly ? " disabled" : ""}><span class="pct" style="color:${col}">${pct.toFixed(0)}%</span></div>
       <div class="bar"><i style="width:${pct}%;background:${col}"></i></div>
       <div class="arow"><span class="asub" style="flex:1">${ha} · ${(100 - pct).toFixed(0)}% sem cobertura</span>
       <button class="btn sm" data-fly="${i}">Ver</button><button class="btn sm danger" data-del="${i}">Excluir</button></div></li>`;
@@ -468,6 +468,7 @@ function flyTo(c) {
 /* ---------- Edição ---------- */
 let editing = null, snapshot = null;
 function edit(id) {
+  if (readonly) return;
   const c = byId[id]; editing = c; snapshot = { ...c };
   const t = (label, f, full) => `<label class="fld${full ? " full" : ""}"><span>${label}</span><input data-f="${f}" value="${esc(c[f])}"></label>`;
   const n = (label, f, step) => `<label class="fld"><span>${label}</span><input data-f="${f}" type="number" step="${step}" value="${c[f]}"></label>`;
@@ -752,9 +753,9 @@ async function loadRemote() {
     if (r.status === 401) return openLogin();
     if (!r.ok) return; // sem /api (ex.: arquivo aberto direto do disco): segue com os dados do navegador
     const d = await r.json();
-    remote = true; rev = d.rev; isSample = false; $("tagSample").hidden = true;
+    remote = true; rev = d.rev; readonly = d.role !== "edit"; document.body.classList.toggle("readonly", readonly); isSample = false; $("tagSample").hidden = true;
     await applyState(d.cams, d.areas);
-    toast(d.cams.length ? `${d.cams.length} câmeras carregadas do banco.` : "Banco vazio. Importe uma planilha em Dados.");
+    toast(readonly ? "Acesso somente leitura." : d.cams.length ? `${d.cams.length} câmeras carregadas do banco.` : "Banco vazio. Importe uma planilha em Dados.");
   } catch (e) { console.error(e); }
 }
 async function doLogin(signup) {

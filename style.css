@@ -161,3 +161,6 @@ dialog a { color: var(--accent); }
   .legend { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+/* Acesso somente leitura: esconde tudo que altera dados (o servidor também recusa) */
+.readonly #btnAdd, .readonly #btnDraw, .readonly [data-act="edit"], .readonly [data-del], .readonly #btnImport, .readonly #btnPushLocal, .readonly #resetBox, .readonly #btnTemplate { display: none !important; }
