@@ -124,13 +124,22 @@ dt { color: var(--muted); font-size: 12.5px; }
 dd { margin: 0; font: 400 12.5px/1.45 var(--f-mono); min-width: 0; overflow-wrap: anywhere; }
 .actions { padding: 12px 14px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .actions .wide { grid-column: 1 / -1; }
-.form { padding: 10px 14px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.form details { border-bottom: 1px solid var(--line); }
+.form summary { display: flex; align-items: center; gap: 8px; padding: 11px 14px; cursor: pointer; list-style: none; font: 600 11px/1 var(--f-mono); text-transform: uppercase; letter-spacing: .08em; color: var(--accent); }
+.form summary::-webkit-details-marker { display: none; }
+.form summary::before { content: "▸"; color: var(--muted); font-size: 10px; transition: transform .12s; }
+.form details[open] > summary::before { transform: rotate(90deg); }
+.form summary:hover { background: var(--panel-2); }
+.form .hint { margin-left: auto; color: var(--muted); font-weight: 400; letter-spacing: 0; text-transform: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.form details[open] .hint { display: none; }
+.form .grid { padding: 4px 14px 14px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .fld { display: grid; gap: 4px; min-width: 0; }
 .fld.full { grid-column: 1 / -1; }
 .fld > span { font: 500 10px/1 var(--f-mono); text-transform: uppercase; letter-spacing: .07em; color: var(--muted); display: flex; justify-content: space-between; }
 .fld output { color: var(--fg); }
 .fld input[type=range] { padding: 0; border: 0; background: none; accent-color: var(--accent); }
-.confirm { grid-column: 1 / -1; display: flex; gap: 8px; align-items: center; font-size: 13px; flex-wrap: wrap; }
+.confirm { padding: 10px 14px; display: flex; gap: 8px; align-items: center; font-size: 13px; flex-wrap: wrap; }
+.confirm:empty { display: none; }
 
 dialog { background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 8px; padding: 0; width: min(480px, calc(100% - 32px)); }
 dialog::backdrop { background: rgb(0 0 0 / .55); }

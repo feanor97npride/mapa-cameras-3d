@@ -505,6 +505,12 @@ function flyTo(c) {
 
 /* ---------- Edição ---------- */
 let editing = null, snapshot = null;
+const editOpen = { id: true, visao: true, pos: false, equip: false, gestao: false, ...store.get("editSections") }; // seções abertas do formulário (lembra entre edições)
+function sectionHints() { // resumo na linha da seção, útil quando ela está recolhida
+  const c = editing; if (!c || !$("h_visao")) return;
+  $("h_visao").textContent = `${Math.round(c.heading)}° · ${Math.abs(Math.round(c.tilt))}° · ${c.hfov}° · ${Math.round(c.alcance)} m`;
+  $("h_pos").textContent = `${Number(c.lat).toFixed(5)}, ${Number(c.lon).toFixed(5)}`;
+}
 function edit(id) {
   if (readonly) return;
   const c = byId[id]; editing = c; snapshot = { ...c };
@@ -513,30 +519,24 @@ function edit(id) {
   const r = (label, f, min, max, unit) => { const v = Math.abs(c[f]); return `<label class="fld full"><span>${label}<output id="o_${f}">${v}${unit}</output></span><input data-f="${f}" data-unit="${unit}" type="range" min="${min}" max="${max}" step="1" value="${v}"></label>`; };
   const sel = (label, f, opts) => `<label class="fld"><span>${label}</span><select data-f="${f}">${opts.map(([v, l]) => `<option value="${esc(v)}"${v === c[f] ? " selected" : ""}>${esc(l)}</option>`).join("")}</select></label>`;
   const tipos = Object.keys(TIPOS).map(k => [k, k]); if (!TIPOS[c.tipo]) tipos.push([c.tipo, c.tipo]);
+  const sec = (key, title, body) => `<details data-sec="${key}"${editOpen[key] ? " open" : ""}><summary>${title}<span class="hint" id="h_${key}"></span></summary><div class="grid">${body}</div></details>`;
   $("card").innerHTML = `
     <div class="card-h"><button class="close" data-act="cancel" aria-label="Cancelar edição">×</button>
       <h2>${c._new ? "Nova câmera" : "Editar " + esc(c.id)}</h2><p>${c._new ? "Arraste a câmera para posicioná-la e o ponto azul para girar e definir o alcance." : "Arraste a câmera ou o ponto azul no mapa; o cone acompanha."}</p></div>
     <div class="form">
-      ${t("ID", "id")}${sel("Status", "status", Object.entries(STATUS).map(([k, v]) => [k, v.label]))}
-      ${t("Nome", "nome", true)}
-      ${t("Setor", "setor")}${sel("Tipo", "tipo", tipos)}
-      ${r("Azimute (direção)", "heading", 0, 359, "°")}
-      ${r("Inclinação para baixo", "tilt", 0, 89, "°")}
-      ${r("Campo de visão horizontal", "hfov", 10, 180, "°")}
-      ${r("Alcance", "alcance", 5, 300, " m")}
-      ${r("Altura do solo", "altura", 1, 80, " m")}
-      ${n("Latitude", "lat", "0.000001")}${n("Longitude", "lon", "0.000001")}
-      ${t("Modelo", "modelo", true)}
-      ${t("Endereço IP", "ip")}${t("NVR / gravador", "nvr")}
-      ${t("Motivo / observação", "motivo", true)}
-      ${t("Link do vídeo (http/https ou rtsp)", "stream", true)}
-      ${t("Responsável", "responsavel")}${t("Instalada em", "instalacao")}
+      ${sec("id", "Identificação", `${t("ID", "id")}${sel("Status", "status", Object.entries(STATUS).map(([k, v]) => [k, v.label]))}
+        ${t("Nome", "nome", true)}${t("Setor", "setor")}${sel("Tipo", "tipo", tipos)}`)}
+      ${sec("visao", "Visão", `${r("Azimute (direção)", "heading", 0, 359, "°")}${r("Inclinação para baixo", "tilt", 0, 89, "°")}
+        ${r("Campo de visão horizontal", "hfov", 10, 180, "°")}${r("Alcance", "alcance", 5, 300, " m")}`)}
+      ${sec("pos", "Posição", `${n("Latitude", "lat", "0.000001")}${n("Longitude", "lon", "0.000001")}${r("Altura do solo", "altura", 1, 80, " m")}`)}
+      ${sec("equip", "Equipamento", `${t("Modelo", "modelo", true)}${t("Endereço IP", "ip")}${t("NVR / gravador", "nvr")}${t("Link do vídeo (http/https ou rtsp)", "stream", true)}`)}
+      ${sec("gestao", "Gestão", `${t("Motivo / observação", "motivo", true)}${t("Responsável", "responsavel")}${t("Instalada em", "instalacao")}`)}
       <div class="confirm" id="delBox">${c._new ? "" : `<button class="btn danger" data-act="del">Excluir câmera</button>`}</div>
     </div>
     <div class="actions"><button class="btn" data-act="cancel">Cancelar</button><button class="btn primary" data-act="save">Salvar</button></div>`;
   $("card").hidden = false;
   camDS.clustering.enabled = false; // senão a câmera em edição pode virar parte de um grupo e não dá para arrastar
-  updateHandle(); scheduleCones();
+  sectionHints(); updateHandle(); scheduleCones();
   // se a câmera ou o ponto azul ficaram fora da área visível do mapa (a ficha ocupa a coluna da direita), recentraliza
   const map = $("map").getBoundingClientRect(), hidden = pos => { const w = pos && C.SceneTransforms.worldToWindowCoordinates(scene, pos); return !w || w.x < 24 || w.y < 24 || w.x > map.width - 24 || w.y > map.height - 24; };
   if (hidden(camPos(c)) || hidden(handleEnt.position.getValue(C.JulianDate.now()))) flyTo(c);
@@ -555,7 +555,9 @@ function syncForm(f) { // espelha no formulário o que foi arrastado
   const el = $("card").querySelector(`[data-f="${f}"]`); if (!el) return;
   const v = editing[f]; el.value = el.type === "range" ? Math.abs(Math.round(v)) : v;
   const o = $("o_" + f); if (o) o.textContent = Math.abs(Math.round(v)) + el.dataset.unit;
+  sectionHints();
 }
+$("card").addEventListener("toggle", e => { const k = e.target.dataset?.sec; if (k) { editOpen[k] = e.target.open; store.set("editSections", editOpen); } }, true); // 'toggle' não borbulha: captura
 function dragTo(pos) {
   const ll = pickLL(pos), c = editing; if (!ll || !c) return;
   if (drag === "move") { c.lat = +ll.lat.toFixed(7); c.lon = +ll.lon.toFixed(7); c.ground = ll.h; c.entity.position = camPos(c); syncForm("lat"); syncForm("lon"); }
@@ -576,6 +578,7 @@ $("card").addEventListener("input", e => {
   if (el.type === "range") $("o_" + f).textContent = Math.abs(v) + el.dataset.unit;
   if (f === "lat" || f === "lon" || f === "altura") editing.entity.position = camPos(editing);
   if (["lat", "lon", "heading", "alcance"].includes(f)) updateHandle();
+  sectionHints();
   if (f === "status") editing.entity.billboard.image = ICONS[v + "_sel"];
   scheduleCones();
 });
