@@ -71,7 +71,7 @@ let byId = {};
 let selected = null, coneMode = "all", mode3d = "plano", token = store.get("ionToken") || "";
 const statusOn = { online: true, alerta: true, offline: true, planejada: true };
 function index() { byId = Object.fromEntries(cams.map(c => [c.id, c])); }
-let remote = false, readonly = false, pushTimer = 0, rev = 0, pushQueue = Promise.resolve(); // rev: versão do banco que este navegador carregou // remote: logado, dados no banco Neon (via /api) em vez do navegador
+let remote = false, readonly = false, pushTimer = 0, rev = 0, base = null, pushQueue = Promise.resolve(); // rev: versão do banco que este navegador carregou // remote: logado, dados no banco Neon (via /api) em vez do navegador
 const snapshotState = () => ({ cams: cams.map(({ entity, _new, _has, _nocoords, ...r }) => r), areas: areas.map(({ pct, total, label, ...r }) => r) });
 function save() {
   if (!remote) { store.set("cams", snapshotState().cams); store.set("areas", snapshotState().areas); }
@@ -86,14 +86,34 @@ function pushRemote() {
 }
 async function sendState() { // uma gravação por vez, para a versão (rev) nunca ficar defasada
   pushTimer = 0;
+  const sent = snapshotState(); // base = o que o banco passa a ter depois desta gravação
   try {
-    const r = await fetch("/api/cameras", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...snapshotState(), rev }) });
-    if (r.ok) { rev = (await r.json()).rev; if (!pushTimer) saveState("Salvo ✓", "ok"); return; }
+    const r = await fetch("/api/cameras", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...sent, rev }) });
+    if (r.ok) { rev = (await r.json()).rev; base = structuredClone(sent); if (!pushTimer) saveState("Salvo ✓", "ok"); return; }
     saveState("Não salvo", "bad");
     if (r.status === 401) { remote = false; openLogin(); }
-    else if (r.status === 409) { toast("Outra pessoa alterou os dados. Recarregando a versão mais nova (sua última mudança não foi salva)."); loadRemote(); }
+    else if (r.status === 409) await resolveConflict();
     else toast("Não consegui salvar no banco: " + ((await r.json().catch(() => ({}))).error || r.status));
   } catch (e) { saveState("Não salvo", "bad"); toast("Sem conexão: as mudanças não foram salvas no banco."); }
+}
+async function resolveConflict() { // outra pessoa salvou antes: combina as duas versões em vez de descartar a minha
+  try {
+    const r = await fetch("/api/cameras"); if (!r.ok || !base) throw new Error(r.status);
+    const t = await r.json(), theirs = { cams: t.cams, areas: t.areas }, m = mergeState(base, snapshotState(), theirs);
+    rev = t.rev; base = structuredClone(theirs); reconcile(m);
+    const why = c => c.deleted === "mine" ? `${c.id} (você a excluiu, mas outra pessoa a alterou: ficou)` : c.deleted === "theirs" ? `${c.id} (outra pessoa a excluiu, mas você a alterou: ficou a sua)` : `${c.id} (${c.fields.join(", ")})`;
+    toast(m.conflicts.length ? `Outra pessoa também mexeu em ${m.conflicts.map(why).join("; ")}. Nos campos em conflito, valeu a versão dela. Confira.` : "Suas mudanças foram combinadas com as de outra pessoa.", 9000);
+    if (m.dirty) pushRemote(); else saveState("Salvo ✓", "ok");
+  } catch (e) { console.error(e); toast("Outra pessoa alterou os dados e não consegui combinar. Recarregando (sua última mudança não foi salva)."); loadRemote(); }
+}
+function reconcile(m) { // aplica o resultado da combinação sem mexer na seleção nem no que está sendo editado
+  const cur = new Map(cams.map(c => [c.id, c]));
+  const next = m.cams.map(n => { const o = cur.get(n.id); if (!o || o === editing) return o || n; return Object.assign(o, n); });
+  cams.filter(c => !next.includes(c)).forEach(c => c.entity && camDS.entities.remove(c.entity));
+  cams = next; index();
+  for (const c of cams) { if (!c.entity) addEntity(c); else { c.entity.position = camPos(c); c.entity.billboard.image = ICONS[c.status + (c.id === selected ? "_sel" : "")]; } }
+  areas = m.areas; rebuildAreaEntities(); renderSetores(); render(); computeCoverage();
+  if (selected && !byId[selected]) select(null); else if (selected && !editing) select(selected, false);
 }
 function saveState(text, cls = "") { const el = $("saveState"); el.textContent = text; el.className = "save " + cls; }
 index();
@@ -630,7 +650,7 @@ function flyHome(duration = 1.4) {
   viewer.camera.flyToBoundingSphere(bs, { offset: new C.HeadingPitchRange(5 * D2R, -48 * D2R, Math.max(400, bs.radius * 2.3)), duration });
 }
 $("btnHome").onclick = () => flyHome();
-function toast(msg) { const t = $("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toast.h); toast.h = setTimeout(() => t.hidden = true, 4000); }
+function toast(msg, ms = 4000) { const t = $("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toast.h); toast.h = setTimeout(() => t.hidden = true, ms); }
 
 /* ---------- Relevo, prédios e Google 3D ---------- */
 let terrainTP = null, osm = null, google = null, pendingMode = null;
@@ -900,6 +920,7 @@ async function loadRemote() {
     if (!r.ok) return remote ? toast("Não consegui recarregar do banco.") : loadLocal(); // sem /api (ex.: servidor local de testes): usa os dados do navegador
     const d = await r.json();
     remote = true; rev = d.rev; readonly = d.role !== "edit"; document.body.classList.toggle("readonly", readonly); isSample = false; $("tagSample").hidden = true;
+    base = structuredClone({ cams: d.cams, areas: d.areas }); // antes do applyState, que mexe nos objetos
     $("geoForm").hidden = false;
     $("userEmail").textContent = d.email + (readonly ? " · somente leitura" : ""); $("userBox").hidden = false;
     await applyState(d.cams, d.areas);

@@ -36,7 +36,7 @@ Para usar as suas câmeras, clique em **Dados → Escolher planilha**. O arquivo
 | Status | Online, Alerta, Offline ou Planejada |
 | Stream | link do vídeo ao vivo (http/https) |
 
-Os dados cadastrados ficam salvos no navegador de quem usa (localStorage). Use **Dados → Planilha Excel** para fazer backup ou levar para outro computador.
+Com login, os dados ficam no banco Neon e são compartilhados. Se duas pessoas editam ao mesmo tempo, o painel combina as mudanças câmera por câmera e campo por campo (`merge.js`); só avisa quando as duas mexeram no mesmo campo, e nesse caso vale a versão que já estava no banco. Sem banco (arquivo aberto direto), os dados ficam no navegador (localStorage). Use **Dados → Planilha Excel** para fazer backup.
 
 ## Relevo e prédios 3D
 
