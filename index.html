@@ -140,7 +140,7 @@ dialog h2 { margin: 0; font: 700 18px/1.2 var(--f-display); }
 dialog h3 { margin: 4px 0 0; font: 600 11px/1 var(--f-mono); text-transform: uppercase; letter-spacing: .08em; color: var(--accent); }
 dialog p { margin: 0; color: var(--muted); font-size: 13px; }
 dialog code { font-family: var(--f-mono); font-size: 12px; color: var(--fg); }
-dialog input[type=text], dialog input:not([type]) { width: 100%; background: var(--bg); border: 1px solid var(--line); border-radius: 5px; padding: 8px 10px; font-family: var(--f-mono); font-size: 12px; }
+dialog input[type=text], dialog input[type=email], dialog input[type=password], dialog input:not([type]) { width: 100%; background: var(--bg); border: 1px solid var(--line); border-radius: 5px; padding: 8px 10px; font-family: var(--f-mono); font-size: 12px; }
 dialog a { color: var(--accent); }
 .dlg-actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -282,12 +282,27 @@ dialog a { color: var(--accent); }
       <button class="btn" id="btnXlsx">Planilha Excel</button>
       <button class="btn" id="btnKml">KML (Google Earth)</button>
     </div>
+    <div id="dbBox" hidden>
+      <h3>Banco de dados</h3>
+      <div class="grid2"><button class="btn" id="btnPushLocal" hidden>Enviar dados deste navegador</button><button class="btn" id="btnLogout">Sair</button></div>
+    </div>
     <h3>Restaurar</h3>
     <div class="grid2" id="resetBox">
       <button class="btn danger" id="btnReset">Voltar aos dados de exemplo</button>
     </div>
     <div class="dlg-actions"><button class="btn" id="dataClose">Fechar</button></div>
   </div>
+</dialog>
+
+<dialog id="dlgLogin">
+  <form id="loginForm">
+    <h2>Entrar no painel</h2>
+    <p>Acesso restrito. Use o e-mail autorizado. Na primeira vez, preencha e-mail e senha (mínimo 8 caracteres) e clique em <b>Criar conta</b>.</p>
+    <label><span class="lbl">E-mail</span><input id="lEmail" type="email" autocomplete="username" required></label>
+    <label><span class="lbl">Senha</span><input id="lPass" type="password" autocomplete="current-password" minlength="8" required></label>
+    <p id="loginMsg" role="alert" style="color:var(--bad)"></p>
+    <div class="dlg-actions"><button class="btn" type="button" id="btnSignup">Criar conta</button><button class="btn primary" type="submit">Entrar</button></div>
+  </form>
 </dialog>
 
 <div id="report"></div>
@@ -368,10 +383,22 @@ let byId = {};
 let selected = null, coneMode = "all", mode3d = "plano", token = store.get("ionToken") || "";
 const statusOn = { online: true, alerta: true, offline: true, planejada: true };
 function index() { byId = Object.fromEntries(cams.map(c => [c.id, c])); }
+let remote = false, pushTimer = 0; // remote: logado, dados no banco Neon (via /api) em vez do navegador
+const snapshotState = () => ({ cams: cams.map(({ entity, _new, ...r }) => r), areas: areas.map(({ pct, total, label, ...r }) => r) });
 function save() {
-  store.set("cams", cams.map(({ entity, ...rest }) => rest));
-  store.set("areas", areas.map(({ pct, total, ...rest }) => rest));
+  if (!remote) { store.set("cams", snapshotState().cams); store.set("areas", snapshotState().areas); }
   isSample = false; $("tagSample").hidden = true;
+  pushRemote();
+}
+function pushRemote() {
+  if (!remote) return;
+  clearTimeout(pushTimer);
+  pushTimer = setTimeout(async () => {
+    try {
+      const r = await fetch("/api/cameras", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(snapshotState()) });
+      if (r.status === 401) { remote = false; openLogin(); } else if (!r.ok) toast("Não consegui salvar no banco: " + ((await r.json().catch(() => ({}))).error || r.status));
+    } catch (e) { toast("Sem conexão: as mudanças não foram salvas no banco."); }
+  }, 600);
 }
 index(); $("tagSample").hidden = !isSample;
 
@@ -924,7 +951,7 @@ function download(text, name, type) {
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
 
-$("btnData").onclick = () => { $("resetBox").innerHTML = `<button class="btn danger" id="btnReset">Voltar aos dados de exemplo</button>`; $("dlgData").showModal(); };
+$("btnData").onclick = () => { $("resetBox").innerHTML = `<button class="btn danger" id="btnReset">Voltar aos dados de exemplo</button>`; $("dbBox").hidden = !remote; $("btnPushLocal").hidden = !(store.get("cams") || []).length; $("dlgData").showModal(); };
 $("dataClose").onclick = () => $("dlgData").close();
 $("btnImport").onclick = () => $("file").click();
 $("btnTemplate").onclick = () => writeXlsx(exportRows(cams.slice(0, 3)), "modelo-cameras.xlsx");
@@ -950,14 +977,14 @@ $("file").addEventListener("change", async e => {
   } catch (err) { console.error(err); toast("Não consegui ler esse arquivo. Use .xlsx, .xls ou .csv."); }
 });
 $("resetBox").addEventListener("click", async e => {
-  if (e.target.id === "btnReset") return $("resetBox").innerHTML = `<span style="grid-column:1/-1;font-size:13px">Isso apaga as câmeras e áreas atuais deste navegador.</span><button class="btn danger solid" id="resetOk">Apagar e restaurar</button><button class="btn" id="resetNo">Manter</button>`;
+  if (e.target.id === "btnReset") return $("resetBox").innerHTML = `<span style="grid-column:1/-1;font-size:13px">${remote ? "Isso apaga as câmeras e áreas do banco de dados." : "Isso apaga as câmeras e áreas atuais deste navegador."}</span><button class="btn danger solid" id="resetOk">Apagar e restaurar</button><button class="btn" id="resetNo">Manter</button>`;
   if (e.target.id === "resetNo") return $("resetBox").innerHTML = `<button class="btn danger" id="btnReset">Voltar aos dados de exemplo</button>`;
   if (e.target.id !== "resetOk") return;
   store.set("cams", null); store.set("areas", null);
   cams = sampleCams(); areas = []; isSample = true; $("tagSample").hidden = false;
   selected = null; editing = null; $("card").hidden = true;
   index(); await sampleGround(cams); rebuildEntities(); rebuildAreaEntities(); renderSetores(); render(); computeCoverage(); flyHome();
-  $("dlgData").close(); toast("Dados de exemplo restaurados.");
+  $("dlgData").close(); pushRemote(); toast("Dados de exemplo restaurados.");
 });
 
 $("btnKml").onclick = () => {
@@ -1001,6 +1028,42 @@ viewer.camera.flyToBoundingSphere(start, { offset: new C.HeadingPitchRange(0, -6
 setTimeout(() => flyHome(2), 300); // o movimento também recalcula os agrupamentos depois que os ícones carregam
 const savedMode = store.get("mode3d");
 if (token && savedMode && savedMode !== "plano") applyMode(savedMode); else computeCoverage();
+
+/* ---------- Login e banco de dados ---------- */
+function openLogin() { if (!$("dlgLogin").open) $("dlgLogin").showModal(); }
+async function applyState(c, a) {
+  if (editing) cancelEdit();
+  cams = c; areas = a; selected = null; $("card").hidden = true;
+  index(); await sampleGround(cams); rebuildEntities(); rebuildAreaEntities(); renderSetores(); $("fSetor").value = ""; render(); computeCoverage(); flyHome();
+}
+async function loadRemote() {
+  try {
+    const r = await fetch("/api/cameras");
+    if (r.status === 401) return openLogin();
+    if (!r.ok) return; // sem /api (ex.: arquivo aberto direto do disco): segue com os dados do navegador
+    const d = await r.json();
+    remote = true; isSample = false; $("tagSample").hidden = true;
+    await applyState(d.cams, d.areas);
+    toast(d.cams.length ? `${d.cams.length} câmeras carregadas do banco.` : "Banco vazio. Importe uma planilha em Dados.");
+  } catch (e) { console.error(e); }
+}
+async function doLogin(signup) {
+  $("loginMsg").textContent = "";
+  const r = await fetch("/api/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: $("lEmail").value.trim(), password: $("lPass").value, signup }) }).catch(() => null);
+  if (!r) return $("loginMsg").textContent = "Sem conexão.";
+  if (!r.ok) return $("loginMsg").textContent = (await r.json().catch(() => ({}))).error || "Não consegui entrar.";
+  $("lPass").value = ""; $("dlgLogin").close(); loadRemote();
+}
+$("loginForm").addEventListener("submit", e => { e.preventDefault(); doLogin(false); });
+$("btnSignup").onclick = () => { if ($("loginForm").reportValidity()) doLogin(true); };
+$("dlgLogin").addEventListener("cancel", e => e.preventDefault()); // sem login não há como fechar
+$("btnLogout").onclick = async () => { await fetch("/api/logout", { method: "POST" }); location.reload(); };
+$("btnPushLocal").onclick = async () => {
+  if (!confirm("Isso substitui as câmeras e áreas do banco pelas deste navegador. Continuar?")) return;
+  $("dlgData").close(); await applyState(store.get("cams") || [], store.get("areas") || []); save();
+  toast("Dados do navegador enviados ao banco.");
+};
+loadRemote();
 </script>
 </body>
 </html>

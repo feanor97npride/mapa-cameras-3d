@@ -1,0 +1,6 @@
+{
+  "name": "mapa-cameras-3d",
+  "private": true,
+  "type": "module",
+  "dependencies": { "@neondatabase/serverless": "^1.0.0" }
+}
