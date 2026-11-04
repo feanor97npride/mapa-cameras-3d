@@ -54,3 +54,7 @@ O token é colado no próprio painel (botão **Token Cesium**) e fica só no nav
 - [CesiumJS 1.123](https://cesium.com/platform/cesiumjs/): globo 3D
 - [SheetJS 0.18.5](https://sheetjs.com/): leitura e escrita de planilhas
 - Imagens de satélite: Esri World Imagery. Mapa: OpenStreetMap / CARTO
+
+## Backup
+
+Uma função agendada (`/api/backup`, todo dia às 07:00 UTC) copia câmeras, áreas e histórico para a tabela `backups` e guarda os 14 mais recentes. Banco vazio não gera backup. Para restaurar, veja `sql/restore-backup.sql`. O Neon gratuito também guarda 6 horas de histórico (Backup & Restore no console).
