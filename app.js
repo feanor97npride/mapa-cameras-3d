@@ -72,7 +72,7 @@ let selected = null, coneMode = "all", mode3d = "plano", token = store.get("ionT
 const statusOn = { online: true, alerta: true, offline: true, planejada: true };
 function index() { byId = Object.fromEntries(cams.map(c => [c.id, c])); }
 let remote = false, readonly = false, pushTimer = 0, rev = 0, pushQueue = Promise.resolve(); // rev: versão do banco que este navegador carregou // remote: logado, dados no banco Neon (via /api) em vez do navegador
-const snapshotState = () => ({ cams: cams.map(({ entity, _new, ...r }) => r), areas: areas.map(({ pct, total, label, ...r }) => r) });
+const snapshotState = () => ({ cams: cams.map(({ entity, _new, _has, _nocoords, ...r }) => r), areas: areas.map(({ pct, total, label, ...r }) => r) });
 function save() {
   if (!remote) { store.set("cams", snapshotState().cams); store.set("areas", snapshotState().areas); }
   isSample = false; $("tagSample").hidden = true;
@@ -350,10 +350,21 @@ handler.setInputAction(ev => {
     viewer.camera.flyToBoundingSphere(bs, { offset: new C.HeadingPitchRange(0, -50 * D2R, Math.max(250, bs.radius * 3.2)), duration: 1.2 });
   }
 }, C.ScreenSpaceEventType.LEFT_CLICK);
-handler.setInputAction(ev => { if (pickMode === "area") { const ll = pickLL(ev.endPosition); mouseLL = ll ? [ll.lon, ll.lat] : null; } }, C.ScreenSpaceEventType.MOUSE_MOVE);
+handler.setInputAction(ev => {
+  if (drag) return dragTo(ev.endPosition);
+  if (pickMode === "area") { const ll = pickLL(ev.endPosition); mouseLL = ll ? [ll.lon, ll.lat] : null; }
+}, C.ScreenSpaceEventType.MOUSE_MOVE);
+handler.setInputAction(ev => { // começa a arrastar a câmera (mover) ou o ponto azul (direção e alcance), só durante a edição
+  if (!editing || pickMode) return;
+  const hit = scene.drillPick(ev.position).find(o => o.id === editing.entity || o.id === handleEnt); // drillPick: os cones translúcidos podem estar na frente
+  drag = !hit ? null : hit.id === handleEnt ? "handle" : "move";
+  if (drag) { scene.screenSpaceCameraController.enableInputs = false; scene.canvas.style.cursor = "grabbing"; }
+}, C.ScreenSpaceEventType.LEFT_DOWN);
+handler.setInputAction(() => { if (!drag) return; drag = null; scene.screenSpaceCameraController.enableInputs = true; scene.canvas.style.cursor = ""; }, C.ScreenSpaceEventType.LEFT_UP);
 handler.setInputAction(() => { if (pickMode === "area") finishArea(); }, C.ScreenSpaceEventType.RIGHT_CLICK);
 document.addEventListener("keydown", e => {
   if (e.key !== "Escape") return;
+  if (!$("layers").hidden) return setLayers(false);
   if (pickMode) setPickMode(null); else if (editing) cancelEdit(); else if (selected) select(null);
 });
 
@@ -373,6 +384,7 @@ function counts() { const k = { online: 0, alerta: 0, offline: 0, planejada: 0 }
 function render() {
   const vis = visible(), visSet = new Set(vis.map(c => c.id));
   for (const c of cams) if (c.entity) c.entity.show = visSet.has(c.id) || c.id === selected;
+  camDS.clustering.enabled = !editing; if (!editing) updateHandle();
   camDS.clustering.pixelRange = camDS.clustering.pixelRange; // força reagrupar
   const sorted = [...vis].sort((a, b) => ORDER[a.status] - ORDER[b.status] || String(a.id).localeCompare(String(b.id)));
   $("list").innerHTML = sorted.length ? sorted.map(c => `<li><button data-id="${esc(c.id)}" aria-current="${c.id === selected}">
@@ -480,7 +492,7 @@ function edit(id) {
   const tipos = Object.keys(TIPOS).map(k => [k, k]); if (!TIPOS[c.tipo]) tipos.push([c.tipo, c.tipo]);
   $("card").innerHTML = `
     <div class="card-h"><button class="close" data-act="cancel" aria-label="Cancelar edição">×</button>
-      <h2>${c._new ? "Nova câmera" : "Editar " + esc(c.id)}</h2><p>${c._new ? "Ajuste a direção e o alcance; o cone acompanha no mapa." : "As mudanças aparecem no mapa enquanto você edita."}</p></div>
+      <h2>${c._new ? "Nova câmera" : "Editar " + esc(c.id)}</h2><p>${c._new ? "Arraste a câmera para posicioná-la e o ponto azul para girar e definir o alcance." : "Arraste a câmera ou o ponto azul no mapa; o cone acompanha."}</p></div>
     <div class="form">
       ${t("ID", "id")}${sel("Status", "status", Object.entries(STATUS).map(([k, v]) => [k, v.label]))}
       ${t("Nome", "nome", true)}
@@ -500,7 +512,36 @@ function edit(id) {
     </div>
     <div class="actions"><button class="btn" data-act="cancel">Cancelar</button><button class="btn primary" data-act="save">Salvar</button></div>`;
   $("card").hidden = false;
-  scheduleCones();
+  camDS.clustering.enabled = false; // senão a câmera em edição pode virar parte de um grupo e não dá para arrastar
+  updateHandle(); scheduleCones();
+  // a ficha cobre o canto esquerdo do mapa: se a câmera ou o ponto azul ficaram embaixo dela (ou fora da tela), recentraliza
+  const box = $("card").getBoundingClientRect(), map = $("map").getBoundingClientRect(), hidden = pos => { const w = pos && C.SceneTransforms.worldToWindowCoordinates(scene, pos); return !w || w.x < 0 || w.y < 0 || w.x > map.width || w.y > map.height || (w.x + map.left < box.right + 24 && w.y + map.top < box.bottom + 24); };
+  if (hidden(camPos(c)) || hidden(handleEnt.position.getValue(C.JulianDate.now()))) flyTo(c);
+}
+/* ---------- Arrastar no mapa (câmera e ponto de direção/alcance) ---------- */
+const handleDS = new C.CustomDataSource("handle"); viewer.dataSources.add(handleDS);
+let handleEnt = null, drag = null;
+function updateHandle() {
+  if (!editing) { handleDS.entities.removeAll(); handleEnt = null; return; }
+  const c = editing, k = 111320 * Math.cos(c.lat * D2R);
+  const pos = C.Cartesian3.fromDegrees(c.lon + Math.sin(c.heading * D2R) * c.alcance / k, c.lat + Math.cos(c.heading * D2R) * c.alcance / 111320, (c.ground || 0) + 1);
+  if (handleEnt) handleEnt.position = pos;
+  else handleEnt = handleDS.entities.add({ position: pos, point: { pixelSize: 15, color: C.Color.fromCssColorString("#5cc8e6"), outlineColor: C.Color.WHITE, outlineWidth: 2, disableDepthTestDistance: Number.POSITIVE_INFINITY } });
+}
+function syncForm(f) { // espelha no formulário o que foi arrastado
+  const el = $("card").querySelector(`[data-f="${f}"]`); if (!el) return;
+  const v = editing[f]; el.value = el.type === "range" ? Math.abs(Math.round(v)) : v;
+  const o = $("o_" + f); if (o) o.textContent = Math.abs(Math.round(v)) + el.dataset.unit;
+}
+function dragTo(pos) {
+  const ll = pickLL(pos), c = editing; if (!ll || !c) return;
+  if (drag === "move") { c.lat = +ll.lat.toFixed(7); c.lon = +ll.lon.toFixed(7); c.ground = ll.h; c.entity.position = camPos(c); syncForm("lat"); syncForm("lon"); }
+  else {
+    const dx = (ll.lon - c.lon) * 111320 * Math.cos(c.lat * D2R), dy = (ll.lat - c.lat) * 111320;
+    c.heading = Math.round((Math.atan2(dx, dy) / D2R + 360) % 360) % 360; c.alcance = Math.min(300, Math.max(5, Math.round(Math.hypot(dx, dy))));
+    syncForm("heading"); syncForm("alcance");
+  }
+  updateHandle(); scheduleCones();
 }
 $("card").addEventListener("input", e => {
   const el = e.target, f = el.dataset.f; if (!f || !editing) return;
@@ -511,6 +552,7 @@ $("card").addEventListener("input", e => {
   editing[f] = f === "id" ? v.trim() : v;
   if (el.type === "range") $("o_" + f).textContent = Math.abs(v) + el.dataset.unit;
   if (f === "lat" || f === "lon" || f === "altura") editing.entity.position = camPos(editing);
+  if (["lat", "lon", "heading", "alcance"].includes(f)) updateHandle();
   if (f === "status") editing.entity.billboard.image = ICONS[v + "_sel"];
   scheduleCones();
 });
@@ -542,6 +584,9 @@ $("card").addEventListener("click", e => {
 });
 
 /* ---------- Barra de ferramentas ---------- */
+function setLayers(open) { $("layers").hidden = !open; $("btnLayers").setAttribute("aria-expanded", open); }
+$("btnLayers").onclick = e => { e.stopPropagation(); setLayers($("layers").hidden); };
+document.addEventListener("click", e => { if (!$("layers").hidden && !$("layers").contains(e.target)) setLayers(false); });
 const press = (sel, b) => document.querySelectorAll(sel).forEach(x => x.setAttribute("aria-pressed", x === b));
 document.querySelectorAll("[data-cones]").forEach(b => b.onclick = () => { coneMode = b.dataset.cones; press("[data-cones]", b); buildCones(); });
 document.querySelectorAll("[data-base]").forEach(b => b.onclick = () => {
@@ -626,18 +671,21 @@ function normStatus(v) {
   if (/^(planej|projet|planned|futur|previst)/.test(s)) return "planejada";
   return "online";
 }
-function mapRows(rows) {
+function mapRows(rows, keepNoCoords = false) { // keepNoCoords: aceita linha com ID mas sem coordenadas (só serve para atualizar uma câmera existente)
   const out = []; let skipped = 0, n = 0;
   for (const row of rows) {
     const r = {}; for (const [k, v] of Object.entries(row)) { const key = KEYMAP[norm(k)]; if (key && v !== "" && r[key] == null) r[key] = v; }
     const lat = num(r.lat), lon = num(r.lon);
-    if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) { skipped++; continue; }
+    const coords = Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180;
+    if (!coords && !(keepNoCoords && r.id != null)) { skipped++; continue; }
     n++;
     const tipo = Object.keys(TIPOS).find(t => norm(r.tipo || "").includes(norm(t))) || (r.tipo ? String(r.tipo) : "Bullet");
     const def = TIPOS[tipo] || TIPOS.Bullet, f = (v, d) => Number.isFinite(num(v)) ? num(v) : d;
     out.push({
+      _has: Object.keys(r).filter(k => coords || (k !== "lat" && k !== "lon")), // colunas preenchidas nesta linha (para atualizar só o que veio na planilha)
+      _nocoords: !coords,
       id: String(r.id ?? "CAM-" + String(n).padStart(3, "0")).trim(), nome: String(r.nome ?? `Câmera ${n}`), setor: String(r.setor ?? "Sem setor"),
-      tipo, modelo: String(r.modelo ?? ""), lat, lon, ground: 0,
+      tipo, modelo: String(r.modelo ?? ""), lat: coords ? lat : 0, lon: coords ? lon : 0, ground: 0,
       altura: f(r.altura, 6), heading: ((f(r.heading, 0) % 360) + 360) % 360, tilt: -Math.abs(f(r.tilt, 20)),
       hfov: Math.min(180, Math.max(5, f(r.hfov, def.hfov))), alcance: Math.max(1, f(r.alcance, def.alc)),
       status: normStatus(r.status ?? ""), motivo: String(r.motivo ?? ""), ultimoSinal: 0,
@@ -680,16 +728,58 @@ $("file").addEventListener("change", async e => {
       wb = XLSX.read(text.replace(/^﻿/, ""), { type: "string" });
     } else wb = XLSX.read(buf);
     const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "", raw: false });
-    const res = mapRows(rows);
+    const res = mapRows(rows, true);
     if (!res.cams.length) return toast("Nenhuma linha com Latitude e Longitude válidas. Confira os nomes das colunas no modelo.");
-    $("dlgData").close();
-    if (editing) cancelEdit();
-    selected = null; $("card").hidden = true;
-    cams = res.cams; index(); await sampleGround(cams); rebuildEntities(); save(); renderSetores(); $("fSetor").value = "";
-    render(); computeCoverage(); flyHome();
-    toast(`${res.cams.length} câmeras importadas${res.skipped ? `, ${res.skipped} linhas ignoradas (sem coordenadas válidas)` : ""}.`);
+    $("dlgData").close(); previewImport(res);
   } catch (err) { console.error(err); toast("Não consegui ler esse arquivo. Use .xlsx, .xls ou .csv."); }
 });
+
+/* ---------- Importar com prévia: atualizar por ID ou substituir tudo ---------- */
+const IMPORT_FIELDS = ["nome", "setor", "tipo", "modelo", "lat", "lon", "altura", "heading", "tilt", "hfov", "alcance", "status", "motivo", "ip", "firmware", "nvr", "instalacao", "manutencao", "responsavel", "stream"];
+let pendingImport = null;
+function planImport(res, base) { // compara a planilha com as câmeras atuais
+  const cur = Object.fromEntries(base.map(c => [c.id, c]));
+  const merge = base.length > 0 && res.cams.every(c => c._has.includes("id")); // sem ID em todas as linhas, não dá para casar com as atuais
+  const nuevas = [], alteradas = []; let iguais = 0, orfas = 0;
+  for (const n of res.cams) {
+    const o = cur[n.id]; if (!o) { n._nocoords ? orfas++ : nuevas.push(n); continue; }
+    const campos = n._has.filter(k => IMPORT_FIELDS.includes(k) && String(o[k]) !== String(n[k]));
+    campos.length ? alteradas.push({ id: n.id, campos }) : iguais++;
+  }
+  const ausentes = base.filter(c => !res.cams.some(n => n.id === c.id)).length;
+  return { merge, nuevas, alteradas, iguais, ausentes, orfas, comCoords: res.cams.filter(c => !c._nocoords).length };
+}
+function previewImport(res) {
+  const base = isSample ? [] : cams, p = planImport(res, base);
+  if (!p.comCoords && !(p.merge && p.alteradas.length + p.iguais)) return toast(p.merge ? "Nenhuma linha da planilha casou com as câmeras atuais (confira a coluna ID)." : "Nenhuma linha com Latitude e Longitude válidas. Confira os nomes das colunas no modelo.");
+  pendingImport = { res, p };
+  const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+  $("impSummary").textContent = p.merge
+    ? `${plural(p.nuevas.length, "câmera nova", "câmeras novas")} · ${plural(p.alteradas.length, "alterada", "alteradas")} · ${plural(p.iguais, "igual", "iguais")} · ${plural(p.ausentes, "câmera atual fora da planilha", "câmeras atuais fora da planilha")}`
+    : base.length ? `A planilha tem ${plural(p.comCoords, "câmera", "câmeras")} e vai substituir as ${base.length} atuais.` : `${plural(p.comCoords, "câmera será adicionada", "câmeras serão adicionadas")}.`;
+  $("impChanges").innerHTML = p.merge ? p.alteradas.slice(0, 6).map(a => `<li>${esc(a.id)}: ${esc(a.campos.join(", "))}</li>`).join("") + (p.alteradas.length > 6 ? `<li>…e mais ${p.alteradas.length - 6}</li>` : "") : "";
+  $("impModes").hidden = !p.merge;
+  document.querySelector('input[name=impMode][value=merge]').checked = true;
+  $("impNote").textContent = [base.length && !p.merge ? "A planilha precisa ter a coluna ID em todas as linhas para atualizar por ID; por isso só dá para substituir." : "", res.skipped + (p.merge ? p.orfas : res.cams.length - p.comCoords) ? `${res.skipped + (p.merge ? p.orfas : res.cams.length - p.comCoords)} linhas ignoradas (sem coordenadas válidas ou sem câmera com esse ID).` : ""].filter(Boolean).join(" ");
+  $("dlgImport").showModal();
+}
+async function applyImport({ res, p }, mode) {
+  if (editing) cancelEdit();
+  selected = null; $("card").hidden = true;
+  const clean = c => { delete c._has; delete c._nocoords; return c; };
+  if (mode === "merge") {
+    const cur = Object.fromEntries(cams.map(c => [c.id, c]));
+    for (const n of res.cams) { const o = cur[n.id]; if (o) n._has.filter(k => IMPORT_FIELDS.includes(k)).forEach(k => o[k] = n[k]); else if (!n._nocoords) cams.push(clean(n)); }
+  } else cams = res.cams.filter(c => !c._nocoords).map(clean);
+  index(); await sampleGround(cams); rebuildEntities(); save(); renderSetores(); $("fSetor").value = "";
+  render(); computeCoverage(); flyHome();
+  toast(mode === "merge" ? `Importado: ${p.nuevas.length} novas, ${p.alteradas.length} atualizadas.` : `${cams.length} câmeras importadas${res.skipped ? `, ${res.skipped} linhas ignoradas (sem coordenadas válidas)` : ""}.`);
+}
+$("impCancel").onclick = () => { pendingImport = null; $("dlgImport").close(); };
+$("impOk").onclick = async () => {
+  const job = pendingImport; pendingImport = null; $("dlgImport").close(); if (!job) return;
+  await applyImport(job, job.p.merge && document.querySelector("input[name=impMode]:checked").value === "merge" ? "merge" : "replace");
+};
 $("resetBox").addEventListener("click", async e => {
   if (e.target.id === "btnReset") return $("resetBox").innerHTML = `<span style="grid-column:1/-1;font-size:13px">${remote ? "Isso apaga as câmeras e áreas do banco de dados." : "Isso apaga as câmeras e áreas atuais deste navegador."}</span><button class="btn danger solid" id="resetOk">Apagar e restaurar</button><button class="btn" id="resetNo">Manter</button>`;
   if (e.target.id === "resetNo") return $("resetBox").innerHTML = `<button class="btn danger" id="btnReset">Voltar aos dados de exemplo</button>`;

@@ -11,8 +11,9 @@ O front-end são três arquivos estáticos (`index.html`, `style.css`, `app.js`)
 - Status online, alerta, offline e planejada, com disponibilidade em %
 - Agrupamento automático das câmeras próximas, colorido pelo pior status
 - Ficha técnica, "ver do ponto de vista da câmera" e link para o Google Earth
-- Cadastro e edição no mapa, com o cone atualizando ao vivo
-- Importação de planilha (.xlsx, .xls ou .csv) e exportação para Excel e KML
+- Cadastro e edição no mapa: arraste a câmera para posicioná-la e o ponto azul para girar e definir o alcance, com o cone atualizando ao vivo
+- Importação de planilha (.xlsx, .xls ou .csv) com prévia do que muda, atualizando por ID ou substituindo tudo, e exportação para Excel e KML
+- Menu **Camadas** com cones, relevo, mapa base e mancha de cobertura
 - Áreas de interesse com % de cobertura e mancha de pontos cegos
 - Simulação de câmeras planejadas antes da instalação
 - Relevo real, prédios do OpenStreetMap e cidades fotorrealistas do Google (com token Cesium ion)

@@ -46,13 +46,7 @@
   <div class="pane" id="paneAreas" hidden>
     <div class="areatools">
       <button class="btn primary" id="btnDraw">Desenhar área no mapa</button>
-      <label class="check"><input type="checkbox" id="chkCov">Mostrar mancha de cobertura no mapa</label>
-      <label class="check"><input type="checkbox" id="chkPlan">Contar câmeras planejadas (simulação)</label>
-      <div class="covlegend">
-        <span><i class="sw" style="background:rgba(70,201,139,.75)"></i>2+ câmeras</span>
-        <span><i class="sw" style="background:rgba(70,201,139,.4)"></i>1 câmera</span>
-        <span><i class="sw" style="background:rgba(236,95,95,.6)"></i>Ponto cego</span>
-      </div>
+      <p class="asub">A mancha de cobertura e os pontos cegos ficam em <b>Camadas ▾ → Cobertura</b>, no mapa.</p>
     </div>
     <div class="listhead"><span id="areaCount">0 áreas</span><span>Coberto</span></div>
     <ul id="areas" class="scroll"></ul>
@@ -68,19 +62,35 @@
 <main id="main">
   <div id="map"></div>
   <div class="toolbar">
-    <div class="seg" role="group" aria-label="Cones de visão">
-      <button data-cones="all" aria-pressed="true">Cones: todos</button>
-      <button data-cones="sel" aria-pressed="false">Só selecionada</button>
-      <button data-cones="none" aria-pressed="false">Ocultar</button>
-    </div>
-    <div class="seg" role="group" aria-label="Relevo e prédios">
-      <button data-mode="plano" aria-pressed="true">Plano</button>
-      <button data-mode="terreno" aria-pressed="false">Terreno + prédios</button>
-      <button data-mode="google" aria-pressed="false">Google 3D</button>
-    </div>
-    <div class="seg" role="group" aria-label="Mapa base" id="segBase">
-      <button data-base="sat" aria-pressed="true">Satélite</button>
-      <button data-base="dark" aria-pressed="false">Mapa</button>
+    <div class="layers-wrap">
+      <button class="btn" id="btnLayers" aria-expanded="false" aria-controls="layers">Camadas ▾</button>
+      <div id="layers" hidden>
+        <h3>Cones de visão</h3>
+        <div class="seg" role="group" aria-label="Cones de visão">
+          <button data-cones="all" aria-pressed="true">Todos</button>
+          <button data-cones="sel" aria-pressed="false">Só selecionada</button>
+          <button data-cones="none" aria-pressed="false">Ocultar</button>
+        </div>
+        <h3>Relevo e prédios</h3>
+        <div class="seg" role="group" aria-label="Relevo e prédios">
+          <button data-mode="plano" aria-pressed="true">Plano</button>
+          <button data-mode="terreno" aria-pressed="false">Terreno + prédios</button>
+          <button data-mode="google" aria-pressed="false">Google 3D</button>
+        </div>
+        <h3>Mapa base</h3>
+        <div class="seg" role="group" aria-label="Mapa base" id="segBase">
+          <button data-base="sat" aria-pressed="true">Satélite</button>
+          <button data-base="dark" aria-pressed="false">Mapa</button>
+        </div>
+        <h3>Cobertura</h3>
+        <label class="check"><input type="checkbox" id="chkCov">Mostrar mancha de cobertura</label>
+        <label class="check"><input type="checkbox" id="chkPlan">Contar câmeras planejadas (simulação)</label>
+        <div class="covlegend">
+          <span><i class="sw" style="background:rgba(70,201,139,.75)"></i>2+ câmeras</span>
+          <span><i class="sw" style="background:rgba(70,201,139,.4)"></i>1 câmera</span>
+          <span><i class="sw" style="background:rgba(236,95,95,.6)"></i>Ponto cego</span>
+        </div>
+      </div>
     </div>
     <div class="seg"><button class="add" id="btnAdd">+ Câmera</button><button id="btnHome">Visão geral</button></div>
   </div>
@@ -109,7 +119,7 @@
   <div class="dlg">
     <h2>Dados das câmeras</h2>
     <h3>Importar</h3>
-    <p>Planilha Excel (.xlsx) ou CSV, uma câmera por linha. Obrigatórias: <code>Latitude</code> e <code>Longitude</code>. Opcionais: ID, Nome, Setor, Tipo, Modelo, IP, Altura, Azimute, Inclinação, FOV, Alcance, Status, Motivo, NVR, Responsável, Instalação, Stream. A importação substitui as câmeras atuais.</p>
+    <p>Planilha Excel (.xlsx) ou CSV, uma câmera por linha. Obrigatórias: <code>Latitude</code> e <code>Longitude</code>. Opcionais: ID, Nome, Setor, Tipo, Modelo, IP, Altura, Azimute, Inclinação, FOV, Alcance, Status, Motivo, NVR, Responsável, Instalação, Stream. Antes de importar, você vê o que vai mudar.</p>
     <div class="grid2">
       <button class="btn primary" id="btnImport">Escolher planilha…</button>
       <button class="btn" id="btnTemplate">Baixar modelo</button>
@@ -129,6 +139,20 @@
       <button class="btn danger" id="btnReset">Voltar aos dados de exemplo</button>
     </div>
     <div class="dlg-actions"><button class="btn" id="dataClose">Fechar</button></div>
+  </div>
+</dialog>
+
+<dialog id="dlgImport">
+  <div class="dlg">
+    <h2>Importar planilha</h2>
+    <p id="impSummary"></p>
+    <ul id="impChanges" class="asub"></ul>
+    <div id="impModes">
+      <label class="check"><input type="radio" name="impMode" value="merge" checked>Atualizar por ID (mantém as câmeras que não estão na planilha)</label>
+      <label class="check"><input type="radio" name="impMode" value="replace">Substituir tudo (apaga as que não estão na planilha)</label>
+    </div>
+    <p id="impNote"></p>
+    <div class="dlg-actions"><button class="btn" id="impCancel">Cancelar</button><button class="btn primary" id="impOk">Importar</button></div>
   </div>
 </dialog>
 
