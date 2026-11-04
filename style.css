@@ -83,11 +83,15 @@ aside { display: flex; flex-direction: column; min-height: 0; background: var(--
 .btn.sm { padding: 4px 8px; font-size: 12px; }
 .foot .btn { flex: 1; }
 
-main { position: relative; min-width: 0; min-height: 0; }
+main { position: relative; min-width: 0; min-height: 0; display: grid; grid-template-columns: 1fr; }
+#stage { position: relative; min-width: 0; min-height: 0; }
+@media (min-width: 761px) { main:has(#card:not([hidden]):not(.collapsed)) { grid-template-columns: 1fr 360px; } } /* a ficha abre ao lado e o mapa encolhe, em vez de cobri-lo */
+#cardTab { display: none; position: absolute; right: 0; top: 96px; z-index: 3; border-radius: 6px 0 0 6px; background: var(--panel); }
+main:has(#card.collapsed:not([hidden])) #cardTab { display: inline-flex; }
 #map { position: absolute; inset: 0; }
 main.picking #map { cursor: crosshair; }
 .cesium-viewer-bottom { opacity: .7; }
-.toolbar { position: absolute; top: 12px; right: 12px; left: 380px; display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; z-index: 2; pointer-events: none; }
+.toolbar { position: absolute; top: 12px; right: 12px; left: 12px; display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; z-index: 2; pointer-events: none; }
 .toolbar > * { pointer-events: auto; }
 .seg { display: inline-flex; background: color-mix(in srgb, var(--panel) 92%, transparent); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; backdrop-filter: blur(6px); }
 .seg button { background: none; border: 0; padding: 7px 10px; cursor: pointer; font-size: 12.5px; font-weight: 500; color: var(--muted); white-space: nowrap; }
@@ -99,12 +103,14 @@ main.picking #map { cursor: crosshair; }
 #modebar { position: absolute; left: 50%; bottom: 70px; transform: translateX(-50%); z-index: 4; background: var(--panel); border: 1px solid var(--accent); border-radius: 8px; padding: 8px 8px 8px 14px; display: flex; gap: 10px; align-items: center; box-shadow: 0 8px 30px rgb(0 0 0 / .4); max-width: calc(100% - 32px); }
 #modebar span { font-size: 13px; }
 
-#card { position: absolute; top: 12px; left: 12px; width: 340px; max-height: calc(100% - 90px); overflow-y: auto; z-index: 3; background: color-mix(in srgb, var(--panel) 96%, transparent); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 12px 40px rgb(0 0 0 / .45); backdrop-filter: blur(8px); }
+#card { min-height: 0; overflow-y: auto; background: var(--panel); border-left: 1px solid var(--line); }
+#card.collapsed { display: none; }
 .card-h { padding: 14px 14px 12px; border-bottom: 1px solid var(--line); display: grid; gap: 6px; position: relative; }
 .card-h h2 { margin: 0; font: 700 22px/1 var(--f-display); font-variant-numeric: tabular-nums; }
 .card-h p { margin: 0; color: var(--muted); padding-right: 24px; }
 .close { position: absolute; top: 10px; right: 10px; background: none; border: 0; color: var(--muted); font-size: 20px; line-height: 1; cursor: pointer; padding: 4px 8px; border-radius: 4px; }
 .close:hover { color: var(--fg); background: var(--panel-2); }
+.close.collapse { right: 40px; }
 .pill { justify-self: start; display: inline-flex; align-items: center; gap: 6px; font: 500 11px/1 var(--f-mono); text-transform: uppercase; letter-spacing: .06em; padding: 5px 8px; border-radius: 99px; border: 1px solid; }
 .pill.online { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
 .pill.alerta { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, transparent); }
@@ -164,7 +170,10 @@ dialog a { color: var(--accent); }
   aside { grid-row: 2; border-right: 0; border-top: 1px solid var(--line); }
   .scroll { max-height: 50vh; }
   .toolbar { left: 12px; justify-content: flex-start; }
-  #card { top: auto; bottom: 12px; left: 12px; right: 12px; width: auto; max-height: 65%; }
+  main { display: block; }
+  #stage { position: absolute; inset: 0; }
+  #card { position: absolute; bottom: 0; left: 0; right: 0; max-height: 65%; z-index: 3; border-left: 0; border-top: 1px solid var(--line); box-shadow: 0 -12px 40px rgb(0 0 0 / .45); }
+  #cardTab { top: auto; bottom: 28px; }
   .legend { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }

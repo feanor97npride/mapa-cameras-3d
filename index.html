@@ -60,6 +60,7 @@
 </aside>
 
 <main id="main">
+<div id="stage">
   <div id="map"></div>
   <div class="toolbar">
     <form class="geo" id="geoForm" hidden>
@@ -99,9 +100,11 @@
     <div class="seg"><button class="add" id="btnAdd">+ Câmera</button><button id="btnHome">Visão geral</button></div>
   </div>
   <div class="legend"><span><i class="dot online"></i>Online</span><span><i class="dot alerta"></i>Alerta</span><span><i class="dot offline"></i>Offline</span><span><i class="dot planejada"></i>Planejada</span></div>
-  <section id="card" hidden aria-live="polite"></section>
+  <button class="btn" id="cardTab" title="Mostrar a ficha da câmera">‹ Ficha</button>
   <div id="modebar" hidden><span id="modeText"></span><button class="btn primary sm" id="modeOk" hidden>Concluir área</button><button class="btn sm" id="modeCancel">Cancelar</button></div>
   <div id="toast" hidden role="status"></div>
+</div>
+<section id="card" hidden aria-live="polite"></section>
 </main>
 
 <dialog id="dlg">

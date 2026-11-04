@@ -10,7 +10,7 @@ O front-end são três arquivos estáticos (`index.html`, `style.css`, `app.js`)
 - Cones de visão 3D (azimute, inclinação, campo de visão e alcance) e pegada no solo
 - Status online, alerta, offline e planejada, com disponibilidade em %
 - Agrupamento automático das câmeras próximas, colorido pelo pior status
-- Ficha técnica, "ver do ponto de vista da câmera" e link para o Google Earth
+- Ficha técnica em painel lateral recolhível (o mapa encolhe em vez de ficar coberto), "ver do ponto de vista da câmera" e link para o Google Earth
 - Cadastro e edição no mapa: arraste a câmera para posicioná-la e o ponto azul para girar e definir o alcance, com o cone atualizando ao vivo
 - Importação de planilha (.xlsx, .xls ou .csv) com prévia do que muda, atualizando por ID ou substituindo tudo, e exportação para Excel e KML
 - Menu **Camadas** com cones, relevo, mapa base e mancha de cobertura

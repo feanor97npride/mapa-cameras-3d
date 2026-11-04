@@ -425,12 +425,14 @@ function select(id, fly) {
   if (selected && byId[selected]?.entity) byId[selected].entity.billboard.image = ICONS[byId[selected].status];
   selected = id || null;
   const c = selected && byId[selected];
+  $("card").classList.remove("collapsed"); // escolher outra câmera reabre a ficha
   if (!c) { $("card").hidden = true; render(); return; }
   c.entity.billboard.image = ICONS[c.status + "_sel"];
   const pos = ["N", "NE", "L", "SE", "S", "SO", "O", "NO"][Math.round(c.heading / 45) % 8];
   $("card").innerHTML = `
     <div class="card-h">
       <button class="close" data-act="close" aria-label="Fechar ficha">×</button>
+      <button class="close collapse" data-act="collapse" aria-label="Recolher a ficha" title="Recolher (a câmera continua selecionada)">›</button>
       <h2>${esc(c.id)}</h2><p>${esc(c.nome)}</p>
       <span class="pill ${c.status}"><i class="dot ${c.status}"></i>${STATUS[c.status].label}${c.status === "offline" && c.ultimoSinal ? " · " + since(c.ultimoSinal) : ""}</span>
       ${c.motivo ? `<div class="reason">${esc(c.motivo)}</div>` : ""}
@@ -515,8 +517,8 @@ function edit(id) {
   $("card").hidden = false;
   camDS.clustering.enabled = false; // senão a câmera em edição pode virar parte de um grupo e não dá para arrastar
   updateHandle(); scheduleCones();
-  // a ficha cobre o canto esquerdo do mapa: se a câmera ou o ponto azul ficaram embaixo dela (ou fora da tela), recentraliza
-  const box = $("card").getBoundingClientRect(), map = $("map").getBoundingClientRect(), hidden = pos => { const w = pos && C.SceneTransforms.worldToWindowCoordinates(scene, pos); return !w || w.x < 0 || w.y < 0 || w.x > map.width || w.y > map.height || (w.x + map.left < box.right + 24 && w.y + map.top < box.bottom + 24); };
+  // se a câmera ou o ponto azul ficaram fora da área visível do mapa (a ficha ocupa a coluna da direita), recentraliza
+  const map = $("map").getBoundingClientRect(), hidden = pos => { const w = pos && C.SceneTransforms.worldToWindowCoordinates(scene, pos); return !w || w.x < 24 || w.y < 24 || w.x > map.width - 24 || w.y > map.height - 24; };
   if (hidden(camPos(c)) || hidden(handleEnt.position.getValue(C.JulianDate.now()))) flyTo(c);
 }
 /* ---------- Arrastar no mapa (câmera e ponto de direção/alcance) ---------- */
@@ -570,10 +572,12 @@ function saveEdit() {
   c.entity.camId = c.id; index(); save(); renderSetores(); scheduleCoverage();
   select(c.id); toast("Câmera salva.");
 }
+$("cardTab").onclick = () => $("card").classList.remove("collapsed");
 $("card").addEventListener("click", e => {
   const act = e.target.closest("[data-act]")?.dataset.act; if (!act) return;
   const c = editing || byId[selected];
   if (act === "close") select(null);
+  if (act === "collapse") $("card").classList.add("collapsed");
   if (act === "fly") flyTo(c);
   if (act === "pov") viewer.camera.flyTo({ destination: camPos(c), orientation: { heading: c.heading * D2R, pitch: c.tilt * D2R, roll: 0 }, duration: 1.6 });
   if (act === "edit") edit(c.id);
