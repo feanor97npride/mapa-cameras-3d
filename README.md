@@ -10,6 +10,9 @@ O front-end são três arquivos estáticos (`index.html`, `style.css`, `app.js`)
 - Cones de visão 3D (azimute, inclinação, campo de visão e alcance) e pegada no solo
 - Status online, alerta, offline e planejada, com disponibilidade em %
 - Histórico completo de status por câmera (botão "Ver histórico completo" na ficha): filtro por período (7 dias a todo o histórico), duração de cada status, disponibilidade do período e "carregar mais"
+- Registro de manutenção por câmera (data, técnico e o que foi feito); o campo "Últ. manutenção" acompanha o registro mais recente
+- Quem alterou o quê: cada mudança de câmera é registrada com e-mail, data, campo, valor antigo e novo, e aparece na ficha
+- Filtros por setor, tipo, NVR, responsável e tempo sem manutenção (6 ou 12 meses, ou nunca registrada), com "Limpar filtros"
 - Aba **Problemas**: só as câmeras offline ou em alerta, as mais antigas primeiro, com há quanto tempo estão assim (do histórico de status)
 - Agrupamento automático das câmeras próximas, colorido pelo pior status
 - Ficha técnica em painel lateral recolhível (o mapa encolhe em vez de ficar coberto), "ver do ponto de vista da câmera" e link para o Google Earth

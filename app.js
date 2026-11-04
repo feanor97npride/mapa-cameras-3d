@@ -391,16 +391,24 @@ document.addEventListener("keydown", e => {
 
 /* ---------- Filtros, lista e indicadores ---------- */
 for (const t in TIPOS) $("fTipo").add(new Option(t, t));
+function overdue(c, months) { // sem manutenção há mais de N meses (câmera planejada ainda não precisa; sem data conta como "sem manutenção")
+  if (c.status === "planejada") return false;
+  const d = parseDate(c.manutencao), cut = new Date(); cut.setMonth(cut.getMonth() - months);
+  return !d || d < cut;
+}
 function visible() {
-  const q = $("q").value.trim().toLowerCase(), st = $("fSetor").value, tp = $("fTipo").value;
-  return cams.filter(c => statusOn[c.status] && (!st || c.setor === st) && (!tp || c.tipo === tp) &&
+  const q = $("q").value.trim().toLowerCase(), st = $("fSetor").value, tp = $("fTipo").value, nv = $("fNvr").value, rp = $("fResp").value, mt = $("fManut").value;
+  return cams.filter(c => statusOn[c.status] && (!st || c.setor === st) && (!tp || c.tipo === tp) && (!nv || c.nvr === nv) && (!rp || c.responsavel === rp) &&
+    (!mt || (mt === "never" ? c.status !== "planejada" && !parseDate(c.manutencao) : overdue(c, +mt))) &&
     (!q || [c.id, c.nome, c.ip, c.modelo, c.setor].join(" ").toLowerCase().includes(q)));
 }
+const FILTERS = ["fSetor", "fTipo", "fNvr", "fResp", "fManut"];
 function since(min) { return min < 60 ? `há ${min} min` : `há ${Math.floor(min / 60)} h ${min % 60} min`; }
-function renderSetores() {
-  const cur = $("fSetor").value, setores = [...new Set(cams.map(c => c.setor))].sort((a, b) => a.localeCompare(b, "pt-BR"));
-  $("fSetor").innerHTML = `<option value="">Todos</option>` + setores.map(s => `<option${s === cur ? " selected" : ""}>${esc(s)}</option>`).join("");
+function fillSelect(id, values) { // mantém a escolha atual se ela ainda existir
+  const cur = $(id).value, list = [...new Set(values.filter(Boolean))].sort((a, b) => a.localeCompare(b, "pt-BR"));
+  $(id).innerHTML = `<option value="">Todos</option>` + list.map(s => `<option${s === cur ? " selected" : ""}>${esc(s)}</option>`).join("");
 }
+function renderSetores() { fillSelect("fSetor", cams.map(c => c.setor)); fillSelect("fNvr", cams.map(c => c.nvr)); fillSelect("fResp", cams.map(c => c.responsavel)); }
 function counts() { const k = { online: 0, alerta: 0, offline: 0, planejada: 0 }; cams.forEach(c => k[c.status]++); return k; }
 function render() {
   const vis = visible(), visSet = new Set(vis.map(c => c.id));
@@ -414,6 +422,7 @@ function render() {
     : cams.length ? `<li class="empty">Nenhuma câmera com esses filtros.</li>`
     : `<li class="empty">Nenhuma câmera cadastrada ainda.${readonly ? "" : `<br><button class="btn primary" data-empty="import">Importar planilha</button><button class="btn" data-empty="add">+ Adicionar câmera</button>`}</li>`;
   $("count").textContent = `${vis.length} de ${cams.length} câmeras`;
+  $("fClear").hidden = !($("q").value || FILTERS.some(id => $(id).value));
   const k = counts(), inst = cams.length - k.planejada;
   $("kTotal").textContent = cams.length; $("kOnline").textContent = k.online; $("kAlerta").textContent = k.alerta; $("kOffline").textContent = k.offline; $("kPlan").textContent = k.planejada;
   $("kPct").textContent = inst ? ((k.online + k.alerta) / inst * 100).toFixed(1).replace(".", ",") + "%" : "–";
@@ -445,8 +454,8 @@ async function loadSince() {
 }
 setInterval(() => { if (!$("paneProb").hidden) loadSince(); }, 60000); // enquanto a aba está aberta, atualiza os tempos
 $("q").addEventListener("input", render);
-$("fSetor").addEventListener("change", render);
-$("fTipo").addEventListener("change", render);
+FILTERS.forEach(id => $(id).addEventListener("change", render));
+$("fClear").onclick = () => { $("q").value = ""; FILTERS.forEach(id => $(id).value = ""); render(); };
 $("kpis").addEventListener("click", e => {
   const b = e.target.closest(".kpi"); if (!b) return;
   if (b.dataset.k === "all") Object.keys(statusOn).forEach(s => statusOn[s] = true); else statusOn[b.dataset.k] = !statusOn[b.dataset.k];
@@ -498,7 +507,9 @@ function select(id, fly) {
     <div class="sec"><h3>Gestão</h3><dl>
       <dt>Setor</dt><dd>${esc(c.setor)}</dd><dt>Instalada em</dt><dd>${esc(c.instalacao) || "–"}</dd>
       <dt>Últ. manutenção</dt><dd>${esc(c.manutencao) || "–"}</dd><dt>Responsável</dt><dd>${esc(c.responsavel) || "–"}</dd></dl></div>
+    <div class="sec" id="maintSec" hidden><h3>Manutenção</h3><div id="maintBody"></div></div>
     <div class="sec" id="histSec" hidden><h3>Histórico · 30 dias</h3><div id="histBody"></div></div>
+    <div class="sec" id="auditSec" hidden><h3>Alterações</h3><div id="auditBody"></div></div>
     <div class="actions">
       <button class="btn" data-act="fly">Centralizar</button>
       <button class="btn" data-act="pov">Ver da câmera</button>
@@ -507,10 +518,77 @@ function select(id, fly) {
       <button class="btn primary" data-act="edit">Editar</button>
     </div>`;
   $("card").hidden = false;
-  render(); loadHistory(c.id);
+  render(); loadHistory(c.id); loadMaint(c.id); loadAudit(c.id);
   if (fly) flyTo(c);
   document.querySelector(`#list button[data-id="${CSS.escape(c.id)}"]`)?.scrollIntoView({ block: "nearest" });
 }
+/* ---------- Manutenção por câmera ---------- */
+const brDate = iso => iso.split("-").reverse().join("/"); // 2026-11-03 -> 03/11/2026
+function parseDate(s) { // aceita 03/11/2026, 11/2026 e 2026-11-03; o resto vira "sem data"
+  s = String(s || "").trim(); let m;
+  if ((m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/))) return new Date(+m[3], +m[2] - 1, +m[1]);
+  if ((m = s.match(/^(\d{4})-(\d{2})-(\d{2})/))) return new Date(+m[1], +m[2] - 1, +m[3]);
+  if ((m = s.match(/^(\d{1,2})\/(\d{4})$/))) return new Date(+m[2], +m[1] - 1, 1);
+  return null;
+}
+async function loadMaint(id, removedDate) { // removedDate: data do registro que acabou de ser excluído
+  if (!remote) return;
+  try {
+    const r = await fetch("/api/maintenance?id=" + encodeURIComponent(id));
+    if (!r.ok) return;
+    const { items } = await r.json();
+    if (selected !== id || editing || !$("maintBody")) return;
+    $("maintBody").innerHTML = (items.length ? `<ul class="mlist">${items.slice(0, 6).map(m => `<li><span class="when">${brDate(m.done_on)}${m.tecnico ? " · " + esc(m.tecnico) : ""}</span>${readonly ? "<span></span>" : `<button class="x" data-del-maint="${m.id}" data-date="${m.done_on}" title="Excluir este registro" aria-label="Excluir registro">×</button>`}<span class="what">${esc(m.descricao)}</span></li>`).join("")}</ul>${items.length > 6 ? `<p class="asub">…e mais ${items.length - 6} registros mais antigos.</p>` : ""}` : `<p class="asub">Nenhum serviço registrado.</p>`) +
+      (readonly ? "" : `<button class="btn sm" data-act="maint">+ Registrar manutenção</button>`);
+    $("maintSec").hidden = false;
+    syncMaint(id, items, removedDate);
+  } catch (e) { console.error(e); }
+}
+function syncMaint(id, items, removedDate) { // "Últ. manutenção" da câmera acompanha o registro mais recente
+  const c = byId[id], last = items[0] ? brDate(items[0].done_on) : removedDate && c?.manutencao === brDate(removedDate) ? "" : null; // sem registros: só limpa se o campo vinha do registro excluído (pode ser um texto importado)
+  if (readonly || !c || last == null || c.manutencao === last) return;
+  c.manutencao = last; save(); if (selected === id && !editing) select(id, false);
+}
+function openMaint(id) { $("maintTitle").textContent = `Registrar manutenção · ${id}`; $("mDate").value = new Date().toLocaleDateString("sv-SE"); $("mDate").max = $("mDate").value; $("mWho").value = $("mWhat").value = ""; $("maintMsg").textContent = ""; $("dlgMaint").showModal(); $("mWhat").focus(); }
+$("maintCancel").onclick = () => $("dlgMaint").close();
+$("maintForm").addEventListener("submit", async e => {
+  e.preventDefault(); const id = selected; if (!id) return;
+  const r = await fetch("/api/maintenance", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ camera_id: id, done_on: $("mDate").value, tecnico: $("mWho").value, descricao: $("mWhat").value }) }).catch(() => null);
+  if (!r) return $("maintMsg").textContent = "Sem conexão.";
+  if (!r.ok) return $("maintMsg").textContent = (await r.json().catch(() => ({}))).error || "Não consegui registrar.";
+  $("dlgMaint").close(); toast("Manutenção registrada."); loadMaint(id);
+});
+$("card").addEventListener("click", async e => {
+  const b = e.target.closest("[data-del-maint]"); if (!b || !confirm("Excluir este registro de manutenção?")) return;
+  const r = await fetch("/api/maintenance?id=" + b.dataset.delMaint, { method: "DELETE" }).catch(() => null);
+  if (r && r.ok) loadMaint(selected, b.dataset.date); else toast("Não consegui excluir o registro.");
+});
+
+/* ---------- Alterações: quem mudou o quê ---------- */
+const FIELD_LABEL = { status: "Status", nome: "Nome", setor: "Setor", tipo: "Tipo", modelo: "Modelo", motivo: "Motivo", ip: "IP", firmware: "Firmware", nvr: "NVR", retencao: "Retenção", instalacao: "Instalação", manutencao: "Últ. manutenção", responsavel: "Responsável", stream: "Vídeo", lat: "Latitude", lon: "Longitude", altura: "Altura", heading: "Azimute", tilt: "Inclinação", hfov: "Campo de visão", alcance: "Alcance" };
+let auditLast = 0;
+function auditRow(e) {
+  const v = (f, x) => x == null || x === "" ? "(vazio)" : f === "status" ? STATUS[x]?.label || x : x.length > 40 ? x.slice(0, 40) + "…" : x;
+  const what = e.action === "create" ? "criou a câmera" : e.action === "delete" ? "excluiu a câmera" : e.field ? `${FIELD_LABEL[e.field] || e.field}: ${esc(v(e.field, e.old_value))} → ${esc(v(e.field, e.new_value))}` : esc(e.new_value || "");
+  return `<li><span class="when">${new Date(e.at).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })} · ${esc(String(e.who).split("@")[0])}</span><span></span><span class="what">${what}</span></li>`;
+}
+async function loadAudit(id, more) {
+  if (!remote) return;
+  if (!more) await settled();
+  try {
+    const r = await fetch(`/api/audit?id=${encodeURIComponent(id)}&limit=10${more ? "&before=" + auditLast : ""}`);
+    if (!r.ok) return;
+    const { events, more: has } = await r.json();
+    if (selected !== id || editing || !$("auditBody")) return;
+    if (events.length) auditLast = events[events.length - 1].id;
+    if (!more) $("auditBody").innerHTML = events.length ? `<ul class="mlist"></ul>` : `<p class="asub">Nenhuma alteração registrada ainda.</p>`;
+    $("auditBody").querySelector(".mlist")?.insertAdjacentHTML("beforeend", events.map(auditRow).join(""));
+    $("auditBody").querySelector("[data-act=audit-more]")?.remove();
+    if (has) $("auditBody").insertAdjacentHTML("beforeend", `<button class="btn sm" data-act="audit-more">Mostrar mais</button>`);
+    $("auditSec").hidden = false;
+  } catch (e) { console.error(e); }
+}
+
 /* ---------- Histórico completo: período + "carregar mais" ---------- */
 let histId = null, histLast = 0, histPrev = null; // histPrev: horário do item mais recente já listado (para calcular a duração de cada status)
 async function fillHistory(more) {
@@ -530,14 +608,18 @@ function openHistory(id) { histId = id; $("histTitle").textContent = `Histórico
 $("histDays").onchange = () => fillHistory(false);
 $("histMore").onclick = () => fillHistory(true);
 $("histClose").onclick = () => $("dlgHist").close();
-async function loadHistory(id) {
-  if (!remote) return;
+async function settled() { // espera a gravação pendente chegar ao banco (histórico e alterações dependem dela)
   if (pushTimer) await new Promise(r => setTimeout(r, 700)); // deixa a gravação pendente entrar na fila...
   await pushQueue; // ...e espera ela chegar ao banco
+}
+async function loadHistory(id) {
+  if (!remote) return;
+  await settled();
   try {
     const r = await fetch("/api/history?id=" + encodeURIComponent(id));
-    if (!r.ok || selected !== id || editing || !$("histBody")) return;
+    if (!r.ok) return;
     const { events, availability } = await r.json();
+    if (selected !== id || editing || !$("histBody")) return; // a ficha pode ter mudado enquanto a resposta chegava
     const fmt = t => new Date(t).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
     $("histBody").innerHTML = `<p class="asub">Disponibilidade: <b>${availability == null ? "–" : availability.toFixed(1).replace(".", ",") + "%"}</b></p>` +
       `<dl>${events.slice(0, 8).map(e => `<dt>${fmt(e.at)}</dt><dd><i class="dot ${esc(e.status)}"></i> ${esc(STATUS[e.status]?.label || e.status)}${e.motivo ? " · " + esc(e.motivo) : ""}</dd>`).join("")}</dl>` +
@@ -649,6 +731,8 @@ $("card").addEventListener("click", e => {
   if (act === "close") select(null);
   if (act === "collapse") $("card").classList.add("collapsed");
   if (act === "hist") openHistory(c.id);
+  if (act === "maint") openMaint(c.id);
+  if (act === "audit-more") loadAudit(c.id, true);
   if (act === "fly") flyTo(c);
   if (act === "pov") viewer.camera.flyTo({ destination: camPos(c), orientation: { heading: c.heading * D2R, pitch: c.tilt * D2R, roll: 0 }, duration: 1.6 });
   if (act === "edit") edit(c.id);

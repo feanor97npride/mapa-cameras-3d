@@ -39,8 +39,13 @@
         <label><span class="lbl">Setor</span><select id="fSetor"><option value="">Todos</option></select></label>
         <label><span class="lbl">Tipo</span><select id="fTipo"><option value="">Todos</option></select></label>
       </div>
+      <div class="row2">
+        <label><span class="lbl">NVR / gravador</span><select id="fNvr"><option value="">Todos</option></select></label>
+        <label><span class="lbl">Responsável</span><select id="fResp"><option value="">Todos</option></select></label>
+      </div>
+      <label><span class="lbl">Manutenção</span><select id="fManut"><option value="">Todas</option><option value="6">Sem manutenção há mais de 6 meses</option><option value="12">Sem manutenção há mais de 12 meses</option><option value="never">Nunca registrada</option></select></label>
     </div>
-    <div class="listhead"><span id="count">0 câmeras</span><span>Status · ID</span></div>
+    <div class="listhead"><span id="count">0 câmeras</span><button class="linkbtn" id="fClear" hidden>Limpar filtros</button><span>Status · ID</span></div>
     <ul id="list" class="scroll"></ul>
   </div>
 
@@ -167,6 +172,17 @@
     <p id="impNote"></p>
     <div class="dlg-actions"><button class="btn" id="impCancel">Cancelar</button><button class="btn primary" id="impOk">Importar</button></div>
   </div>
+</dialog>
+
+<dialog id="dlgMaint">
+  <form id="maintForm">
+    <h2 id="maintTitle">Registrar manutenção</h2>
+    <label><span class="lbl">Data do serviço</span><input id="mDate" type="date" required></label>
+    <label><span class="lbl">Técnico ou empresa (opcional)</span><input id="mWho" type="text" maxlength="100" autocomplete="off"></label>
+    <label><span class="lbl">O que foi feito</span><input id="mWhat" type="text" maxlength="500" required autocomplete="off" placeholder="Ex.: troca da lente, limpeza, troca de cabo"></label>
+    <p id="maintMsg" role="alert" style="color:var(--bad)"></p>
+    <div class="dlg-actions"><button class="btn" type="button" id="maintCancel">Cancelar</button><button class="btn primary" type="submit">Registrar</button></div>
+  </form>
 </dialog>
 
 <dialog id="dlgHist">

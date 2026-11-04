@@ -1,4 +1,5 @@
 import { sql, requireUser, jsonOnly } from "./_lib.js";
+import { diffCameras } from "./_audit.js";
 
 const TXT = ["nome", "setor", "tipo", "modelo", "motivo", "ip", "firmware", "nvr", "retencao", "instalacao", "manutencao", "responsavel", "stream"];
 const NUM = ["lat", "lon", "ground", "altura", "heading", "tilt", "hfov", "alcance"];
@@ -38,15 +39,19 @@ export default async function handler(req, res) {
       });
       const cols = ["id", "status", "ultimo_sinal", ...TXT, ...NUM];
       const list = cols.join(", "), sets = cols.slice(1).map(c => `${c} = EXCLUDED.${c}`).join(", ");
+      // O que mudou, lido antes de gravar: se a gravação passar, o banco ainda é exatamente este (senão a versão (rev) não casa e nada é gravado).
+      const audit = diffCameras(await sql`SELECT * FROM cameras`, rows);
       // Controle de versão: um único comando; tudo só age se o UPDATE da revisão casar (ninguém salvou depois deste cliente carregar).
       const bump = await sql.query(
         `WITH bump AS (UPDATE app_state SET rev = rev + 1 WHERE rev = $1::bigint RETURNING rev::int AS rev),
           d AS (DELETE FROM cameras WHERE id <> ALL($2::text[]) AND EXISTS (SELECT 1 FROM bump)),
           u AS (INSERT INTO cameras (${list}) SELECT ${list} FROM jsonb_populate_recordset(NULL::cameras, $3::jsonb) WHERE EXISTS (SELECT 1 FROM bump) ON CONFLICT (id) DO UPDATE SET ${sets}),
           da AS (DELETE FROM areas WHERE EXISTS (SELECT 1 FROM bump)),
-          ia AS (INSERT INTO areas (nome, pts) SELECT nome, pts FROM jsonb_to_recordset($4::jsonb) AS t(nome text, pts jsonb) WHERE EXISTS (SELECT 1 FROM bump))
+          ia AS (INSERT INTO areas (nome, pts) SELECT nome, pts FROM jsonb_to_recordset($4::jsonb) AS t(nome text, pts jsonb) WHERE EXISTS (SELECT 1 FROM bump)),
+          au AS (INSERT INTO audit_log (user_email, camera_id, action, field, old_value, new_value)
+                 SELECT $5, a.camera_id, a.action, a.field, a.old_value, a.new_value FROM jsonb_to_recordset($6::jsonb) AS a(camera_id text, action text, field text, old_value text, new_value text) WHERE EXISTS (SELECT 1 FROM bump))
          SELECT rev FROM bump`,
-        [rev, rows.map(r => r.id), JSON.stringify(rows), JSON.stringify(ar)]);
+        [rev, rows.map(r => r.id), JSON.stringify(rows), JSON.stringify(ar), user.email, JSON.stringify(audit)]);
       if (!bump.length) return res.status(409).json({ error: "conflito" });
       return res.json({ ok: true, rev: bump[0].rev });
     }
