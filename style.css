@@ -214,3 +214,13 @@ dialog a { color: var(--accent); }
 .badge { display: inline-block; margin-left: 6px; min-width: 18px; padding: 3px 5px; border-radius: 99px; font: 600 10px/1 var(--f-mono); background: var(--warn); color: #1a1300; vertical-align: 1px; }
 .badge.bad { background: var(--bad); color: #fff; }
 .ctype.late { color: var(--bad); }
+
+/* Histórico completo */
+#dlgHist { width: min(560px, calc(100% - 32px)); }
+#histList { max-height: 50vh; border: 1px solid var(--line); border-radius: 6px; }
+#histList li { display: grid; grid-template-columns: 128px 1fr auto; gap: 4px 10px; align-items: baseline; padding: 8px 12px; border-bottom: 1px solid var(--line); font-size: 13px; }
+#histList li:last-child { border-bottom: 0; }
+#histList time { font: 400 12px/1.3 var(--f-mono); color: var(--muted); }
+#histList .dur { font: 400 11.5px/1.3 var(--f-mono); color: var(--muted); white-space: nowrap; }
+#histList .why { grid-column: 2 / 4; color: var(--muted); font-size: 12.5px; }
+#histSec .btn { margin-top: 8px; }

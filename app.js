@@ -423,7 +423,8 @@ function render() {
 }
 /* ---------- Aba Problemas: câmeras offline ou em alerta, as mais antigas primeiro ---------- */
 let sinceMap = {}; // id -> desde quando está no status atual (do histórico no banco)
-function ago(ms) { const m = Math.max(0, Math.round(ms / 60000)); return m < 60 ? `há ${m} min` : m < 48 * 60 ? `há ${Math.floor(m / 60)} h ${m % 60} min` : `há ${Math.floor(m / 1440)} dias`; }
+function dur(ms) { const m = Math.max(0, Math.round(ms / 60000)); return m < 60 ? `${m} min` : m < 48 * 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${Math.floor(m / 1440)} dias`; }
+const ago = ms => "há " + dur(ms);
 function renderProblems() {
   const probs = cams.filter(c => c.status === "offline" || c.status === "alerta"), now = Date.now();
   const t = c => sinceMap[c.id] ? new Date(sinceMap[c.id]).getTime() : c.status === "offline" && c.ultimoSinal ? now - c.ultimoSinal * 60000 : now; // sem histórico: usa o "último sinal" (se houver)
@@ -510,6 +511,25 @@ function select(id, fly) {
   if (fly) flyTo(c);
   document.querySelector(`#list button[data-id="${CSS.escape(c.id)}"]`)?.scrollIntoView({ block: "nearest" });
 }
+/* ---------- Histórico completo: período + "carregar mais" ---------- */
+let histId = null, histLast = 0, histPrev = null; // histPrev: horário do item mais recente já listado (para calcular a duração de cada status)
+async function fillHistory(more) {
+  if (!more) { $("histList").innerHTML = `<li class="empty">Carregando…</li>`; $("histAvail").textContent = ""; $("histMore").hidden = true; histLast = 0; histPrev = null; }
+  try {
+    const r = await fetch(`/api/history?id=${encodeURIComponent(histId)}&days=${$("histDays").value}&limit=50${more ? "&before=" + histLast : ""}`);
+    if (!r.ok) throw new Error(r.status);
+    const d = await r.json(), fmt = t => new Date(t).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+    if (!more) $("histAvail").innerHTML = d.availability == null ? "" : `Disponibilidade no período: <b>${d.availability.toFixed(1).replace(".", ",")}%</b>`;
+    const rows = d.events.map(e => { const t = new Date(e.at).getTime(), li = `<li><time>${fmt(e.at)}</time><span><i class="dot ${esc(e.status)}"></i> ${esc(STATUS[e.status]?.label || e.status)}</span><span class="dur">${histPrev == null ? "até agora" : "durou " + dur(histPrev - t)}</span>${e.motivo ? `<span class="why">${esc(e.motivo)}</span>` : ""}</li>`; histPrev = t; return li; });
+    if (!more) $("histList").innerHTML = "";
+    $("histList").insertAdjacentHTML("beforeend", rows.join("") || (more ? "" : `<li class="empty">Nenhuma mudança de status neste período.</li>`));
+    histLast = d.events.length ? d.events[d.events.length - 1].id : histLast; $("histMore").hidden = !d.more;
+  } catch (e) { console.error(e); if (!more) $("histList").innerHTML = `<li class="empty">Não consegui carregar o histórico.</li>`; else toast("Não consegui carregar mais."); }
+}
+function openHistory(id) { histId = id; $("histTitle").textContent = `Histórico de ${id}`; $("histDays").value = "30"; $("dlgHist").showModal(); fillHistory(false); }
+$("histDays").onchange = () => fillHistory(false);
+$("histMore").onclick = () => fillHistory(true);
+$("histClose").onclick = () => $("dlgHist").close();
 async function loadHistory(id) {
   if (!remote) return;
   if (pushTimer) await new Promise(r => setTimeout(r, 700)); // deixa a gravação pendente entrar na fila...
@@ -520,7 +540,8 @@ async function loadHistory(id) {
     const { events, availability } = await r.json();
     const fmt = t => new Date(t).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
     $("histBody").innerHTML = `<p class="asub">Disponibilidade: <b>${availability == null ? "–" : availability.toFixed(1).replace(".", ",") + "%"}</b></p>` +
-      `<dl>${events.slice(0, 8).map(e => `<dt>${fmt(e.at)}</dt><dd><i class="dot ${esc(e.status)}"></i> ${esc(STATUS[e.status]?.label || e.status)}${e.motivo ? " · " + esc(e.motivo) : ""}</dd>`).join("")}</dl>`;
+      `<dl>${events.slice(0, 8).map(e => `<dt>${fmt(e.at)}</dt><dd><i class="dot ${esc(e.status)}"></i> ${esc(STATUS[e.status]?.label || e.status)}${e.motivo ? " · " + esc(e.motivo) : ""}</dd>`).join("")}</dl>` +
+      (events.length ? `<button class="btn sm" data-act="hist">Ver histórico completo</button>` : "");
     $("histSec").hidden = false;
   } catch (e) { console.error(e); }
 }
@@ -627,6 +648,7 @@ $("card").addEventListener("click", e => {
   const c = editing || byId[selected];
   if (act === "close") select(null);
   if (act === "collapse") $("card").classList.add("collapsed");
+  if (act === "hist") openHistory(c.id);
   if (act === "fly") flyTo(c);
   if (act === "pov") viewer.camera.flyTo({ destination: camPos(c), orientation: { heading: c.heading * D2R, pitch: c.tilt * D2R, roll: 0 }, duration: 1.6 });
   if (act === "edit") edit(c.id);

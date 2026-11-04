@@ -169,6 +169,18 @@
   </div>
 </dialog>
 
+<dialog id="dlgHist">
+  <div class="dlg">
+    <h2 id="histTitle">Histórico de status</h2>
+    <div class="row2">
+      <label><span class="lbl">Período</span><select id="histDays"><option value="7">Últimos 7 dias</option><option value="30" selected>Últimos 30 dias</option><option value="90">Últimos 90 dias</option><option value="365">Último ano</option><option value="0">Todo o histórico</option></select></label>
+      <p class="asub" id="histAvail"></p>
+    </div>
+    <ul id="histList" class="scroll"></ul>
+    <div class="dlg-actions"><button class="btn" id="histMore" hidden>Carregar mais</button><button class="btn" id="histClose">Fechar</button></div>
+  </div>
+</dialog>
+
 <dialog id="dlgLogin">
   <form id="loginForm">
     <h2>Entrar no painel</h2>
