@@ -172,6 +172,15 @@ dialog a { color: var(--accent); }
 /* Acesso somente leitura: esconde tudo que altera dados (o servidor também recusa) */
 .readonly #btnAdd, .readonly #btnDraw, .readonly [data-act="edit"], .readonly [data-del], .readonly #btnImport, .readonly #btnPushLocal, .readonly #resetBox, .readonly #btnTemplate { display: none !important; }
 
+/* Busca de endereço */
+.geo { position: relative; }
+.geo input { width: 240px; background: color-mix(in srgb, var(--panel) 92%, transparent); backdrop-filter: blur(6px); border: 1px solid var(--line); border-radius: 6px; padding: 7px 10px; font-size: 12.5px; }
+.geo input::placeholder { color: var(--muted); }
+#geoRes { position: absolute; top: calc(100% + 6px); left: 0; width: 340px; max-height: 260px; z-index: 6; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 12px 40px rgb(0 0 0 / .45); }
+#geoRes button { width: 100%; text-align: left; background: none; border: 0; border-bottom: 1px solid var(--line); padding: 9px 12px; cursor: pointer; font-size: 12.5px; line-height: 1.35; }
+#geoRes button:hover, #geoRes button:focus-visible { background: var(--panel-2); }
+@media (max-width: 760px) { .geo { flex: 1 1 100%; } .geo input { width: 100%; } #geoRes { width: 100%; } }
+
 /* Menu Camadas */
 .layers-wrap { position: relative; }
 .layers-wrap > .btn { background: color-mix(in srgb, var(--panel) 92%, transparent); backdrop-filter: blur(6px); padding: 7px 12px; }

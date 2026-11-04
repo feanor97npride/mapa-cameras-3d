@@ -365,6 +365,7 @@ handler.setInputAction(() => { if (pickMode === "area") finishArea(); }, C.Scree
 document.addEventListener("keydown", e => {
   if (e.key !== "Escape") return;
   if (!$("layers").hidden) return setLayers(false);
+  if (!$("geoRes").hidden || geoDS.entities.values.length) return clearGeo();
   if (pickMode) setPickMode(null); else if (editing) cancelEdit(); else if (selected) select(null);
 });
 
@@ -584,6 +585,32 @@ $("card").addEventListener("click", e => {
 });
 
 /* ---------- Barra de ferramentas ---------- */
+/* ---------- Busca de endereço ---------- */
+const geoDS = new C.CustomDataSource("geo"); viewer.dataSources.add(geoDS);
+let geoList = [];
+function clearGeo() { geoDS.entities.removeAll(); $("geoRes").hidden = true; }
+function goToAddress(x) {
+  geoDS.entities.removeAll(); $("geoRes").hidden = true;
+  geoDS.entities.add({ position: C.Cartesian3.fromDegrees(x.lon, x.lat), point: { pixelSize: 13, color: C.Color.fromCssColorString("#e9b44c"), outlineColor: C.Color.WHITE, outlineWidth: 2, disableDepthTestDistance: Number.POSITIVE_INFINITY },
+    label: { text: x.label.split(",").slice(0, 2).join(","), font: "600 13px Barlow, sans-serif", fillColor: C.Color.WHITE, outlineColor: C.Color.BLACK, outlineWidth: 3, style: C.LabelStyle.FILL_AND_OUTLINE, pixelOffset: new C.Cartesian2(0, -22), disableDepthTestDistance: Number.POSITIVE_INFINITY } });
+  const [s, n, w, e] = x.bbox && x.bbox.length === 4 ? x.bbox : [x.lat, x.lat, x.lon, x.lon];
+  const radius = Math.max(150, Math.hypot((e - w) * 111320 * Math.cos(x.lat * D2R), (n - s) * 111320) / 2); // mínimo de 150 m, para um endereço não virar zoom extremo
+  viewer.camera.flyToBoundingSphere(new C.BoundingSphere(C.Cartesian3.fromDegrees((w + e) / 2, (s + n) / 2), radius), { offset: new C.HeadingPitchRange(0, -55 * D2R, radius * 2.6), duration: 1.4 });
+}
+$("geoForm").addEventListener("submit", async e => {
+  e.preventDefault(); const q = $("geoQ").value.trim(), ul = $("geoRes");
+  if (q.length < 3) return toast("Digite ao menos 3 letras do endereço.");
+  ul.innerHTML = `<li class="empty">Buscando…</li>`; ul.hidden = false;
+  try {
+    const r = await fetch("/api/geocode?q=" + encodeURIComponent(q)), d = await r.json();
+    if (!r.ok) throw new Error(d.error || r.status);
+    geoList = d;
+    ul.innerHTML = d.length ? d.map((x, i) => `<li><button type="button" data-i="${i}">${esc(x.label)}</button></li>`).join("") : `<li class="empty">Nenhum endereço encontrado.</li>`;
+  } catch (err) { ul.hidden = true; toast(err.message || "Não consegui buscar o endereço."); }
+});
+$("geoRes").addEventListener("click", e => { const b = e.target.closest("button[data-i]"); if (b) goToAddress(geoList[b.dataset.i]); });
+$("geoQ").addEventListener("input", () => { if (!$("geoQ").value) clearGeo(); });
+document.addEventListener("click", e => { if (!$("geoRes").hidden && !$("geoForm").contains(e.target)) $("geoRes").hidden = true; });
 function setLayers(open) { $("layers").hidden = !open; $("btnLayers").setAttribute("aria-expanded", open); }
 $("btnLayers").onclick = e => { e.stopPropagation(); setLayers($("layers").hidden); };
 document.addEventListener("click", e => { if (!$("layers").hidden && !$("layers").contains(e.target)) setLayers(false); });
@@ -869,6 +896,7 @@ async function loadRemote() {
     if (!r.ok) return remote ? toast("Não consegui recarregar do banco.") : loadLocal(); // sem /api (ex.: servidor local de testes): usa os dados do navegador
     const d = await r.json();
     remote = true; rev = d.rev; readonly = d.role !== "edit"; document.body.classList.toggle("readonly", readonly); isSample = false; $("tagSample").hidden = true;
+    $("geoForm").hidden = false;
     $("userEmail").textContent = d.email + (readonly ? " · somente leitura" : ""); $("userBox").hidden = false;
     await applyState(d.cams, d.areas);
     syncToken(d.cesiumToken);
