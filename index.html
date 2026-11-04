@@ -383,7 +383,7 @@ let byId = {};
 let selected = null, coneMode = "all", mode3d = "plano", token = store.get("ionToken") || "";
 const statusOn = { online: true, alerta: true, offline: true, planejada: true };
 function index() { byId = Object.fromEntries(cams.map(c => [c.id, c])); }
-let remote = false, pushTimer = 0; // remote: logado, dados no banco Neon (via /api) em vez do navegador
+let remote = false, pushTimer = 0, rev = 0, pushQueue = Promise.resolve(); // rev: versão do banco que este navegador carregou // remote: logado, dados no banco Neon (via /api) em vez do navegador
 const snapshotState = () => ({ cams: cams.map(({ entity, _new, ...r }) => r), areas: areas.map(({ pct, total, label, ...r }) => r) });
 function save() {
   if (!remote) { store.set("cams", snapshotState().cams); store.set("areas", snapshotState().areas); }
@@ -393,13 +393,17 @@ function save() {
 function pushRemote() {
   if (!remote) return;
   clearTimeout(pushTimer);
-  pushTimer = setTimeout(async () => {
-    try {
-      const r = await fetch("/api/cameras", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(snapshotState()) });
-      if (r.status === 401) { remote = false; openLogin(); } else if (!r.ok) toast("Não consegui salvar no banco: " + ((await r.json().catch(() => ({}))).error || r.status));
-    } catch (e) { toast("Sem conexão: as mudanças não foram salvas no banco."); }
-    pushTimer = 0;
-  }, 600);
+  pushTimer = setTimeout(() => { pushQueue = pushQueue.then(sendState); }, 600);
+}
+async function sendState() { // uma gravação por vez, para a versão (rev) nunca ficar defasada
+  pushTimer = 0;
+  try {
+    const r = await fetch("/api/cameras", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...snapshotState(), rev }) });
+    if (r.ok) rev = (await r.json()).rev;
+    else if (r.status === 401) { remote = false; openLogin(); }
+    else if (r.status === 409) { toast("Outra pessoa alterou os dados. Recarregando a versão mais nova (sua última mudança não foi salva)."); loadRemote(); }
+    else toast("Não consegui salvar no banco: " + ((await r.json().catch(() => ({}))).error || r.status));
+  } catch (e) { toast("Sem conexão: as mudanças não foram salvas no banco."); }
 }
 index(); $("tagSample").hidden = !isSample;
 
@@ -754,7 +758,8 @@ function select(id, fly) {
 }
 async function loadHistory(id) {
   if (!remote) return;
-  if (pushTimer) await new Promise(r => setTimeout(r, 1500)); // espera a gravação pendente chegar ao banco
+  if (pushTimer) await new Promise(r => setTimeout(r, 700)); // deixa a gravação pendente entrar na fila...
+  await pushQueue; // ...e espera ela chegar ao banco
   try {
     const r = await fetch("/api/history?id=" + encodeURIComponent(id));
     if (!r.ok || selected !== id || editing || !$("histBody")) return;
@@ -1057,7 +1062,7 @@ async function loadRemote() {
     if (r.status === 401) return openLogin();
     if (!r.ok) return; // sem /api (ex.: arquivo aberto direto do disco): segue com os dados do navegador
     const d = await r.json();
-    remote = true; isSample = false; $("tagSample").hidden = true;
+    remote = true; rev = d.rev; isSample = false; $("tagSample").hidden = true;
     await applyState(d.cams, d.areas);
     toast(d.cams.length ? `${d.cams.length} câmeras carregadas do banco.` : "Banco vazio. Importe uma planilha em Dados.");
   } catch (e) { console.error(e); }

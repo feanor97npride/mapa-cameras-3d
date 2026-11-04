@@ -18,16 +18,17 @@ export default async function handler(req, res) {
   if (!requireUser(req, res)) return;
   try {
     if (req.method === "GET") {
-      const [cams, areas] = await sql.transaction([
+      const [cams, areas, [{ rev }]] = await sql.transaction([
         sql`SELECT id, nome, setor, tipo, modelo, lat, lon, ground, altura, heading, tilt, hfov, alcance, status, motivo, ultimo_sinal AS "ultimoSinal", ip, firmware, nvr, retencao, instalacao, manutencao, responsavel, stream FROM cameras ORDER BY id`,
         sql`SELECT nome, pts FROM areas ORDER BY id`,
+        sql`SELECT rev::int AS rev FROM app_state`,
       ]);
-      return res.json({ cams, areas });
+      return res.json({ cams, areas, rev });
     }
     if (req.method === "PUT") { // substitui o estado inteiro (o histórico de status só cresce quando o status muda)
       if (!jsonOnly(req, res)) return;
-      const { cams, areas } = req.body || {};
-      if (!Array.isArray(cams) || !Array.isArray(areas) || cams.length > 5000 || areas.length > 500) return res.status(400).json({ error: "dados inválidos" });
+      const { cams, areas, rev } = req.body || {};
+      if (!Number.isInteger(rev) || !Array.isArray(cams) || !Array.isArray(areas) || cams.length > 5000 || areas.length > 500) return res.status(400).json({ error: "dados inválidos" });
       const rows = cams.map(toRow);
       const ar = areas.map(a => {
         if (!Array.isArray(a?.pts) || a.pts.length < 3 || a.pts.some(p => !Array.isArray(p) || !Number.isFinite(p[0]) || !Number.isFinite(p[1]))) throw new Error("área inválida");
@@ -35,13 +36,17 @@ export default async function handler(req, res) {
       });
       const cols = ["id", "status", "ultimo_sinal", ...TXT, ...NUM];
       const list = cols.join(", "), sets = cols.slice(1).map(c => `${c} = EXCLUDED.${c}`).join(", ");
-      await sql.transaction([
-        sql.query(`DELETE FROM cameras WHERE id <> ALL($1::text[])`, [rows.map(r => r.id)]),
-        sql.query(`INSERT INTO cameras (${list}) SELECT ${list} FROM jsonb_populate_recordset(NULL::cameras, $1::jsonb) ON CONFLICT (id) DO UPDATE SET ${sets}`, [JSON.stringify(rows)]),
-        sql`DELETE FROM areas`,
-        sql`INSERT INTO areas (nome, pts) SELECT nome, pts FROM jsonb_to_recordset(${JSON.stringify(ar)}::jsonb) AS t(nome text, pts jsonb)`,
-      ]);
-      return res.json({ ok: true });
+      // Controle de versão: um único comando; tudo só age se o UPDATE da revisão casar (ninguém salvou depois deste cliente carregar).
+      const bump = await sql.query(
+        `WITH bump AS (UPDATE app_state SET rev = rev + 1 WHERE rev = $1::bigint RETURNING rev::int AS rev),
+          d AS (DELETE FROM cameras WHERE id <> ALL($2::text[]) AND EXISTS (SELECT 1 FROM bump)),
+          u AS (INSERT INTO cameras (${list}) SELECT ${list} FROM jsonb_populate_recordset(NULL::cameras, $3::jsonb) WHERE EXISTS (SELECT 1 FROM bump) ON CONFLICT (id) DO UPDATE SET ${sets}),
+          da AS (DELETE FROM areas WHERE EXISTS (SELECT 1 FROM bump)),
+          ia AS (INSERT INTO areas (nome, pts) SELECT nome, pts FROM jsonb_to_recordset($4::jsonb) AS t(nome text, pts jsonb) WHERE EXISTS (SELECT 1 FROM bump))
+         SELECT rev FROM bump`,
+        [rev, rows.map(r => r.id), JSON.stringify(rows), JSON.stringify(ar)]);
+      if (!bump.length) return res.status(409).json({ error: "conflito" });
+      return res.json({ ok: true, rev: bump[0].rev });
     }
     res.status(405).end();
   } catch (e) {
